@@ -1,0 +1,32 @@
+.claude/
+
+# Ignore Windows and VS Code files
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# Ignore test output and reports
+report.html
+
+# Ignore VS Code settings and workspace files
+.vscode/
+
+# Ignore SQLTools extension data
+C:/Users/juani/AppData/Local/vscode-sqltools/Data/.node-runtime
+
+# Ignore test artifacts
+C2W_TEST_ID*
+
+# Ignore Python cache (if any)
+__pycache__/
+*.pyc
+
+# Ignore batch script temp files
+*.~*
+
+# Ignore all distros created by tests
+c2wt*
