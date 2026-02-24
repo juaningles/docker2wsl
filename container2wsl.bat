@@ -12,7 +12,7 @@ setlocal enabledelayedexpansion
 ::    --name,     -n <name>   WSL distro name (default: derived from image)
 ::    --user,     -u <user>   Default user   (default: wsluser)
 ::    --location, -l <path>   WSL storage    (default: C:\wsl-storage)
-::    --bootstrap, -b <file>  Run commands from file after setup
+::    --bootstrap, -b <file>  Run commands from file after setup (repeatable)
 ::    --force,    -f          Overwrite existing WSL distro with same name
 ::    --dry-run               Parse and print config, do not execute
 ::    --help,     -h          Show this help
@@ -34,7 +34,7 @@ set "ARG_IMAGE="
 set "ARG_WSL_NAME="
 set "ARG_WSL_USER="
 set "ARG_WSL_LOCATION="
-set "ARG_BOOTSTRAP="
+set "ARG_BOOTSTRAP_N=0"
 
 :: ============================================================
 ::  ARGUMENT PARSING
@@ -175,7 +175,8 @@ if "%~2"=="--bootstrap" goto :arg_bootstrap_invalid
 if "%~2"=="-b" goto :arg_bootstrap_invalid
 if "%~2"=="--force" goto :arg_bootstrap_invalid
 if "%~2"=="-f" goto :arg_bootstrap_invalid
-set "ARG_BOOTSTRAP=%~2"
+set /a ARG_BOOTSTRAP_N+=1
+set "ARG_BOOTSTRAP_!ARG_BOOTSTRAP_N!=%~2"
 shift
 shift
 goto :parse_args
@@ -232,7 +233,7 @@ echo Options:
 echo  --name,     -n NAME  WSL distribution name (default: derived from image)
 echo  --user,     -u USER  Default Linux user    (default: %DEFAULT_USER%)
 echo  --location, -l PATH  WSL storage root      (default: %DEFAULT_STORAGE%)
-echo  --bootstrap, -b FILE Run commands from FILE after setup
+echo  --bootstrap, -b FILE Run commands from FILE after setup (repeatable)
 echo  --force,    -f       Overwrite existing WSL distro with same name
 echo  --dry-run            Show resolved config without executing
 echo  --help,     -h       Show this help
@@ -261,25 +262,25 @@ echo  Image    : %ARG_IMAGE%
 echo  WSL Name : %ARG_WSL_NAME%
 echo  User     : %ARG_WSL_USER%
 echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
-if defined ARG_BOOTSTRAP echo  Bootstrap: %ARG_BOOTSTRAP%
+if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do echo  Bootstrap: !ARG_BOOTSTRAP_%%i!
 if %FORCE%==1 echo  Force    : yes (overwrite existing distro)
 if %DRY_RUN%==1 echo  Mode     : DRY RUN (no changes will be made)
 echo  ----------------------------------------
 echo.
 
 if %DRY_RUN%==0 goto :after_dryrun
-if defined ARG_BOOTSTRAP call :dryrun_bootstrap
+if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do call :dryrun_bootstrap "!ARG_BOOTSTRAP_%%i!"
 echo [DRY-RUN] All steps skipped.
 exit /b 0
 
 :dryrun_bootstrap
-if not exist "%ARG_BOOTSTRAP%" (
-    echo [DRY-RUN] WARNING: Bootstrap file not found: %ARG_BOOTSTRAP%
+if not exist "%~1" (
+    echo [DRY-RUN] WARNING: Bootstrap file not found: %~1
     echo.
     exit /b 0
 )
-echo [DRY-RUN] Bootstrap commands from: %ARG_BOOTSTRAP%
-for /f "usebackq delims=" %%L in ("%ARG_BOOTSTRAP%") do (
+echo [DRY-RUN] Bootstrap commands from: %~1
+for /f "usebackq delims=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" echo   %%L
 )
@@ -290,7 +291,7 @@ exit /b 0
 
 :: --- Determine step count ---
 set "STEP_COUNT=4"
-if defined ARG_BOOTSTRAP set "STEP_COUNT=5"
+if %ARG_BOOTSTRAP_N% geq 1 set "STEP_COUNT=5"
 
 :: --- Step 1: Ensure Docker image is available locally ---
 call :docker_ensure_image "%ARG_IMAGE%"
@@ -346,11 +347,15 @@ if errorlevel 1 (
 )
 
 :: --- Step 6 (optional): Run bootstrap commands ---
-if defined ARG_BOOTSTRAP (
-    call :wsl_bootstrap "%ARG_WSL_NAME%" "%ARG_BOOTSTRAP%"
-    if errorlevel 1 (
-        echo [ERROR] Bootstrap failed.
-        exit /b 1
+if %ARG_BOOTSTRAP_N% geq 1 (
+    set "_BS_IDX=0"
+    for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do (
+        set /a _BS_IDX+=1
+        call :wsl_bootstrap "%ARG_WSL_NAME%" "!ARG_BOOTSTRAP_%%i!" !_BS_IDX! %ARG_BOOTSTRAP_N%
+        if errorlevel 1 (
+            echo [ERROR] Bootstrap failed.
+            exit /b 1
+        )
     )
 )
 
@@ -544,8 +549,12 @@ exit /b %_WDE_FOUND%
 
 :wsl_bootstrap
 :: Run commands from a bootstrap file inside the WSL distro.
-:: %~1 = distro name   %~2 = bootstrap file path
-echo [5/%STEP_COUNT%] Running bootstrap commands from: %~2
+:: %~1 = distro name   %~2 = bootstrap file path   %~3 = file index   %~4 = total files
+if "%~4"=="1" (
+    echo [5/%STEP_COUNT%] Running bootstrap commands from: %~2
+) else (
+    echo [5/%STEP_COUNT%] Running bootstrap file %~3/%~4: %~2
+)
 if not exist "%~2" (
     echo [ERROR] Bootstrap file not found: %~2
     exit /b 1

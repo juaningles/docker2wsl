@@ -80,6 +80,9 @@ Both mocks are active. The Docker mock always succeeds so only bootstrap behavio
 | Bootstrap command fails | `WSL_BASH_FAIL=1` | Non-zero exit, ERROR message |
 | Bootstrap shown in dry-run | `--dry-run --bootstrap` | Exit 0, bootstrap file and commands listed |
 | Comments and empty lines | file with `#`, blank, command | Only real command runs, comment not executed |
+| Multiple files in order | two `--bootstrap` flags | Both files run, file 1/2 and 2/2 headers shown |
+| Multiple files in dry-run | `--dry-run` + two `--bootstrap` flags | Both files' commands listed |
+| Second file fails | first valid + second missing | Non-zero exit, ERROR message |
 
 ## Mock Details
 
