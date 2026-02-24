@@ -617,28 +617,43 @@ if not exist "%~2" (
 )
 set "_BS_COUNT=0"
 set "_BS_TMP=%TEMP%\c2w_bootstrap.tmp"
+:: Count commands and display them (with variable expansion for user feedback)
 for /f "usebackq delims=" %%L in ("%~2") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
         set /a _BS_COUNT+=1
-        :: Expand %VAR% references (C2W_NAME, C2W_USER, env vars, etc.)
         call set "_BS_EXPANDED=!_BS_LINE!"
         echo       [!_BS_COUNT!] !_BS_EXPANDED!
-        call %WSL_CMD% -d %~1 -u root -- !_BS_EXPANDED! > "%_BS_TMP%" 2>&1
-        set "_BS_RC=!errorlevel!"
-        set "_BS_FAIL=0"
-        if !_BS_RC! neq 0 set "_BS_FAIL=1"
-        findstr /c:"E r r o r" "%_BS_TMP%" >nul 2>&1
-        if not errorlevel 1 set "_BS_FAIL=1"
-        if "!_BS_FAIL!"=="1" (
-            type "%_BS_TMP%"
-            del /f /q "%_BS_TMP%" >nul 2>&1
-            echo [ERROR] Bootstrap command failed: !_BS_EXPANDED!
-            exit /b 1
-        )
-        type "%_BS_TMP%"
-        del /f /q "%_BS_TMP%" >nul 2>&1
     )
+)
+:: Use PowerShell to read the bootstrap file, expand %VAR% references
+:: (including C2W_* and any standard env vars), strip comments/blanks,
+:: prepend "set -e", and write a clean .sh file with Unix line endings.
+:: This avoids CMD mangling shell operators (>>, |, &, etc.).
+set "_BS_SH=%TEMP%\c2w_bootstrap_cmd.sh"
+powershell -noprofile -command ^
+  "$lines = @('set -e'); " ^
+  "Get-Content -LiteralPath '%~2' -Encoding UTF8 | ForEach-Object { " ^
+  "  $l = $_.TrimEnd(); " ^
+  "  if ($l -and -not $l.StartsWith('#')) { " ^
+  "    $lines += [Environment]::ExpandEnvironmentVariables($l) " ^
+  "  } " ^
+  "}; " ^
+  "[IO.File]::WriteAllBytes('%_BS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
+set "_BS_SH_LX=%_BS_SH:\=/%"
+set "_BS_SH_LX=!_BS_SH_LX:C:/=/mnt/c/!"
+set "_BS_SH_LX=!_BS_SH_LX:c:/=/mnt/c/!"
+call %WSL_CMD% -d %~1 -u root -- bash !_BS_SH_LX! > "%_BS_TMP%" 2>&1
+set "_BS_RC=!errorlevel!"
+set "_BS_FAIL=0"
+if !_BS_RC! neq 0 set "_BS_FAIL=1"
+findstr /c:"E r r o r" "%_BS_TMP%" >nul 2>&1
+if not errorlevel 1 set "_BS_FAIL=1"
+type "%_BS_TMP%"
+del /f /q "%_BS_TMP%" "%_BS_SH%" >nul 2>&1
+if "!_BS_FAIL!"=="1" (
+    echo [ERROR] Bootstrap command failed.
+    exit /b 1
 )
 echo       Bootstrap complete ^(!_BS_COUNT! commands executed^).
 exit /b 0
