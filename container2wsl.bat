@@ -16,6 +16,13 @@ setlocal enabledelayedexpansion
 ::    --force,    -f          Overwrite existing WSL distro with same name
 ::    --dry-run               Parse and print config, do not execute
 ::    --help,     -h          Show this help
+::
+::  Bootstrap variables (use %VAR% syntax in bootstrap files):
+::    %C2W_NAME%       WSL distro name
+::    %C2W_USER%       Default Linux user
+::    %C2W_IMAGE%      Docker image name
+::    %C2W_LOCATION%   WSL storage root path
+::    (plus any standard environment variables)
 :: ============================================================
 
 set "VERSION=1.0.0"
@@ -269,6 +276,11 @@ echo  ----------------------------------------
 echo.
 
 if %DRY_RUN%==0 goto :after_dryrun
+:: Set built-in variables so dry-run can show expanded commands
+set "C2W_NAME=%ARG_WSL_NAME%"
+set "C2W_USER=%ARG_WSL_USER%"
+set "C2W_IMAGE=%ARG_IMAGE%"
+set "C2W_LOCATION=%ARG_WSL_LOCATION%"
 if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do call :dryrun_bootstrap "!ARG_BOOTSTRAP_%%i!"
 echo [DRY-RUN] All steps skipped.
 exit /b 0
@@ -282,7 +294,10 @@ if not exist "%~1" (
 echo [DRY-RUN] Bootstrap commands from: %~1
 for /f "usebackq delims=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
-    if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" echo   %%L
+    if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
+        call set "_BS_EXPANDED=!_BS_LINE!"
+        echo   !_BS_EXPANDED!
+    )
 )
 echo.
 exit /b 0
@@ -347,6 +362,13 @@ if errorlevel 1 (
 )
 
 :: --- Step 6 (optional): Run bootstrap commands ---
+:: Set built-in variables for bootstrap file expansion.
+:: Bootstrap commands can reference these as %C2W_NAME%, %C2W_USER%, etc.
+:: Standard environment variables (e.g. %COMPUTERNAME%) also expand.
+set "C2W_NAME=%ARG_WSL_NAME%"
+set "C2W_USER=%ARG_WSL_USER%"
+set "C2W_IMAGE=%ARG_IMAGE%"
+set "C2W_LOCATION=%ARG_WSL_LOCATION%"
 if %ARG_BOOTSTRAP_N% geq 1 (
     set "_BS_IDX=0"
     for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do (
@@ -565,8 +587,10 @@ for /f "usebackq delims=" %%L in ("%~2") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
         set /a _BS_COUNT+=1
-        echo       [!_BS_COUNT!] %%L
-        call %WSL_CMD% -d %~1 -u root -- %%L > "%_BS_TMP%" 2>&1
+        :: Expand %VAR% references (C2W_NAME, C2W_USER, env vars, etc.)
+        call set "_BS_EXPANDED=!_BS_LINE!"
+        echo       [!_BS_COUNT!] !_BS_EXPANDED!
+        call %WSL_CMD% -d %~1 -u root -- !_BS_EXPANDED! > "%_BS_TMP%" 2>&1
         set "_BS_RC=!errorlevel!"
         set "_BS_FAIL=0"
         if !_BS_RC! neq 0 set "_BS_FAIL=1"
@@ -575,7 +599,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
         if "!_BS_FAIL!"=="1" (
             type "%_BS_TMP%"
             del /f /q "%_BS_TMP%" >nul 2>&1
-            echo [ERROR] Bootstrap command failed: %%L
+            echo [ERROR] Bootstrap command failed: !_BS_EXPANDED!
             exit /b 1
         )
         type "%_BS_TMP%"

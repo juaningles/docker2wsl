@@ -157,6 +157,58 @@ set "_RC=%errorlevel%"
 call "%HELPERS%" assert_exit_nonzero "%_RC%" "multi-stop: non-zero exit on missing second file"
 call "%HELPERS%" assert_output_contains "%OUT%" "ERROR" "multi-stop: error message shown"
 
+:: ============================================================
+::  9. Bootstrap variable expansion (C2W_NAME, C2W_USER)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bootstrap variable expansion
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_MOCK_LOG=%C2W_TMPDIR%\mock_var_calls.log"
+if exist "%C2W_MOCK_LOG%" del /f /q "%C2W_MOCK_LOG%" >nul 2>&1
+
+set "_BS_FILE=%C2W_TMPDIR%\bootstrap_vars.txt"
+:: Write literal %%C2W_NAME%% and %%C2W_USER%% (double %% to escape in batch)
+> "%_BS_FILE%" echo echo hello %%C2W_NAME%% %%C2W_USER%%
+
+call "%SCRIPT%" ubuntu:22.04 --name %C2W_TEST_ID%-bsvar --user testuser --bootstrap "%_BS_FILE%" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "var-expand: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "%C2W_TEST_ID%-bsvar" "var-expand: C2W_NAME expanded in output"
+call "%HELPERS%" assert_output_contains "%OUT%" "testuser" "var-expand: C2W_USER expanded in output"
+
+:: ============================================================
+::  10. Environment variable expansion
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m environment variable expansion
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+:: Set a custom env var and write a bootstrap file referencing it.
+:: Build the percent signs from a variable to avoid CMD expanding them.
+set "C2W_TEST_ENVVAL=myenvval42"
+set "_BS_FILE=%C2W_TMPDIR%\bootstrap_envvar.txt"
+set "_PCT=%%"
+> "!_BS_FILE!" echo echo host is !_PCT!C2W_TEST_ENVVAL!_PCT!
+
+call "%SCRIPT%" ubuntu:22.04 --name %C2W_TEST_ID%-bsenv --bootstrap "%_BS_FILE%" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "env-expand: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "myenvval42" "env-expand: custom env var expanded in output"
+
+:: ============================================================
+::  11. Variables expanded in dry-run
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m variables expanded in dry-run
+call :reset_mocks 2>nul
+
+set "_BS_FILE=%C2W_TMPDIR%\bootstrap_vardry.txt"
+> "%_BS_FILE%" echo echo user is %%C2W_USER%%
+
+call "%SCRIPT%" ubuntu:22.04 --name %C2W_TEST_ID%-bsvdry --user dryuser --dry-run --bootstrap "%_BS_FILE%" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "var-dryrun: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "dryuser" "var-dryrun: C2W_USER expanded in dry-run output"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 

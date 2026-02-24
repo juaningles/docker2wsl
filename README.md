@@ -65,6 +65,25 @@ container2wsl.bat ubuntu:22.04 --name my-dev --force
 container2wsl.bat fedora:39 --dry-run
 ```
 
+## Bootstrap Variables
+
+Bootstrap files support `%VAR%` expansion. The following built-in variables are available, along with any standard environment variables:
+
+| Variable | Value |
+|----------|-------|
+| `%C2W_NAME%` | WSL distro name |
+| `%C2W_USER%` | Default Linux user |
+| `%C2W_IMAGE%` | Docker image name |
+| `%C2W_LOCATION%` | WSL storage root path |
+
+Example bootstrap file:
+
+```sh
+# setup.sh
+useradd -m -s /bin/bash %C2W_USER%
+echo "Welcome to %C2W_NAME%" > /etc/motd
+```
+
 ## Testing
 
 The test suite uses mock `docker` and `wsl` commands so it can run without Docker or real WSL imports.

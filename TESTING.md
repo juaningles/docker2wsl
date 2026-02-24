@@ -83,6 +83,9 @@ Both mocks are active. The Docker mock always succeeds so only bootstrap behavio
 | Multiple files in order | two `--bootstrap` flags | Both files run, file 1/2 and 2/2 headers shown |
 | Multiple files in dry-run | `--dry-run` + two `--bootstrap` flags | Both files' commands listed |
 | Second file fails | first valid + second missing | Non-zero exit, ERROR message |
+| Variable expansion | file with `%C2W_NAME%`, `%C2W_USER%` | Variables expanded in executed commands |
+| Env variable expansion | file with `%COMPUTERNAME%` | Standard env vars expanded |
+| Variables in dry-run | `--dry-run` + file with `%C2W_USER%` | Variables expanded in listed commands |
 
 ## Mock Details
 
