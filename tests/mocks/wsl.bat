@@ -40,6 +40,10 @@ exit /b 0
 
 :do_unregister
 :: wsl --unregister <name>
+:: Write a sentinel file so subsequent --list calls know it was unregistered
+if defined C2W_TMPDIR (
+    echo %~2 > "%C2W_TMPDIR%\c2w_mock_unregistered.flag"
+)
 echo [MOCK wsl] --unregister %~2
 exit /b 0
 
@@ -55,9 +59,14 @@ exit /b 0
 :do_list
 :: When C2W_MOCK_WSL_DISTRO_EXISTS is set, output its value as UTF-16 LE
 :: (matching real wsl --list --quiet output encoding)
+:: If the sentinel file exists (from --unregister), skip reporting the distro.
 if defined C2W_MOCK_WSL_DISTRO_EXISTS (
+    if defined C2W_TMPDIR (
+        if exist "%C2W_TMPDIR%\c2w_mock_unregistered.flag" goto :do_list_empty
+    )
     powershell -noprofile -command "[Console]::OutputEncoding = [Text.Encoding]::Unicode; Write-Host '%C2W_MOCK_WSL_DISTRO_EXISTS%'"
     exit /b 0
 )
+:do_list_empty
 echo [MOCK wsl] --list
 exit /b 0

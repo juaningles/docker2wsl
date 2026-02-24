@@ -338,13 +338,16 @@ if not exist "%INSTALL_PATH%\" (
 
 :: --- Check if distro already exists ---
 call :wsl_distro_exists "%ARG_WSL_NAME%"
-if %errorlevel% equ 0 (
+if !errorlevel! equ 0 (
     if %FORCE%==0 (
         echo [ERROR] WSL distribution '%ARG_WSL_NAME%' already exists. Use --force to overwrite.
         exit /b 1
     )
-    echo       Unregistering existing distro '%ARG_WSL_NAME%'...
-    call %WSL_CMD% --unregister "%ARG_WSL_NAME%" >nul 2>&1
+    call :wsl_force_unregister "%ARG_WSL_NAME%"
+    if errorlevel 1 (
+        echo [ERROR] Failed to unregister existing distro '%ARG_WSL_NAME%'.
+        exit /b 1
+    )
 )
 
 :: --- Step 4: Import tar as WSL distribution ---
@@ -567,6 +570,37 @@ for /f "usebackq tokens=*" %%n in ("%_WDE_ASCII%") do (
 :wde_cleanup
 del /f /q "%_WDE_TMP%" "%_WDE_ASCII%" >nul 2>&1
 exit /b %_WDE_FOUND%
+
+
+:wsl_force_unregister
+:: Unregister an existing WSL distribution and verify it's gone.
+:: %~1 = distro name
+:: Uses UNQUOTED name because wsl --unregister behaves like wsl -d (silently
+:: fails with quoted names on some Windows builds).
+echo       Unregistering existing distro '%~1'...
+set "_WFU_TMP=%TEMP%\c2w_wslunreg.tmp"
+call %WSL_CMD% --unregister %~1 > "%_WFU_TMP%" 2>&1
+set "_WFU_RC=%errorlevel%"
+set "_WFU_FAIL=0"
+if %_WFU_RC% neq 0 set "_WFU_FAIL=1"
+findstr /c:"E r r o r" "%_WFU_TMP%" >nul 2>&1
+if not errorlevel 1 set "_WFU_FAIL=1"
+if "%_WFU_FAIL%"=="1" (
+    type "%_WFU_TMP%"
+    del /f /q "%_WFU_TMP%" >nul 2>&1
+    exit /b 1
+)
+del /f /q "%_WFU_TMP%" >nul 2>&1
+:: Verify the distro is actually gone
+call :wsl_distro_exists "%~1"
+if !errorlevel! equ 0 (
+    echo [ERROR] Distro '%~1' still registered after unregister.
+    exit /b 1
+)
+:: Also terminate to ensure no lingering WSL process
+call %WSL_CMD% --terminate %~1 >nul 2>&1
+echo       Unregistered '%~1'.
+exit /b 0
 
 
 :wsl_bootstrap

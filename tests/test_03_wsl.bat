@@ -151,4 +151,5 @@ set "C2W_MOCK_WSL_BASH_FAIL=0"
 set "C2W_MOCK_WSL_DISTRO_EXISTS="
 set "C2W_MOCK_CONTAINER_ID=mock-container-abc123"
 set "C2W_MOCK_LOG="
+if exist "%C2W_TMPDIR%\c2w_mock_unregistered.flag" del /f /q "%C2W_TMPDIR%\c2w_mock_unregistered.flag" >nul 2>&1
 exit /b 0
