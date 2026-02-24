@@ -74,5 +74,6 @@ tests/
 | `C2W_MOCK_EXPORT_FAIL` | 0 | 1 = docker export fails |
 | `C2W_MOCK_WSL_IMPORT_FAIL` | 0 | 1 = wsl --import fails |
 | `C2W_MOCK_WSL_BASH_FAIL` | 0 | 1 = wsl bash commands fail |
+| `C2W_MOCK_WSL_DISTRO_EXISTS` | (unset) | name to report as existing in wsl --list --quiet |
 | `C2W_MOCK_CONTAINER_ID` | mock-container-abc123 | ID returned by docker create |
 | `C2W_MOCK_LOG` | (unset) | path to log file for mock calls |

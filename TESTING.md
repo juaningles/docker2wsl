@@ -37,6 +37,7 @@ These tests use `--dry-run` mode, which parses arguments and prints the resolved
 | `--user` | Custom user replaces default `wsluser` |
 | `--location` | Custom storage path |
 | Name derivation | `/` and `:` in image name become `-` |
+| `--force` dry-run | Force label shown in config display |
 | Unknown flag | Exits non-zero |
 
 ### `test_02_docker.bat` — Docker Operations (MOCKED docker + wsl)
@@ -65,6 +66,20 @@ Both mocks are active. The Docker mock always succeeds so only WSL behavior is e
 | WSL bash commands fail | `WSL_BASH_FAIL=1` | Non-zero exit, ERROR message |
 | Custom storage location | `--location <path>` | Storage directory created at specified path |
 | SUCCESS banner | (defaults) | "SUCCESS" and `wsl -d <name>` shown |
+| Distro exists, no `--force` | `WSL_DISTRO_EXISTS=<name>` | Non-zero exit, "already exists" error |
+| Distro exists, with `--force` | `WSL_DISTRO_EXISTS=<name>`, `--force` | Exit 0, unregister message, SUCCESS |
+
+### `test_04_bootstrap.bat` — Bootstrap Feature (MOCKED docker + wsl)
+
+Both mocks are active. The Docker mock always succeeds so only bootstrap behavior is exercised.
+
+| Test | Setup | What it verifies |
+|------|-------|-----------------|
+| Bootstrap succeeds | 2-command file | Exit 0, commands shown, "Bootstrap complete" message |
+| Bootstrap file not found | nonexistent path | Non-zero exit, ERROR message |
+| Bootstrap command fails | `WSL_BASH_FAIL=1` | Non-zero exit, ERROR message |
+| Bootstrap shown in dry-run | `--dry-run --bootstrap` | Exit 0, bootstrap file and commands listed |
+| Comments and empty lines | file with `#`, blank, command | Only real command runs, comment not executed |
 
 ## Mock Details
 
@@ -91,6 +106,7 @@ Simulates `wsl --import`, `wsl --terminate`, `wsl -d ... -- <cmd>`, and `wsl --l
 |----------|---------|--------|
 | `C2W_MOCK_WSL_IMPORT_FAIL` | `0` | `1` = `wsl --import` returns error |
 | `C2W_MOCK_WSL_BASH_FAIL` | `0` | `1` = `wsl -d <name> ... -- <cmd>` returns error |
+| `C2W_MOCK_WSL_DISTRO_EXISTS` | (unset) | Name to report as existing in `wsl --list --quiet` |
 | `C2W_MOCK_LOG` | (unset) | Path to log file recording all mock calls |
 
 ## Test Runner Features

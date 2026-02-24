@@ -72,6 +72,13 @@ echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m image name derivation (slashes and colons
 call "%SCRIPT%" myrepo/myimage:latest --dry-run > "%OUT%" 2>&1
 call "%HELPERS%" assert_output_contains "%OUT%" "myrepo-myimage-latest" "name derivation: / and : become -"
 
+:: ---- Test: --force shown in dry-run ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m --force shown in dry-run
+call "%SCRIPT%" ubuntu:22.04 --force --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "--force dry-run: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Force" "--force dry-run: Force label shown"
+
 :: ---- Test: unknown flag → help + exit 1 ----
 echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m unknown flag exits non-zero
 call "%SCRIPT%" ubuntu:22.04 --bogus-flag > "%OUT%" 2>&1

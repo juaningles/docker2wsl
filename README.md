@@ -37,6 +37,8 @@ Options:
   --name,     -n <name>   WSL distro name (default: derived from image)
   --user,     -u <user>   Default user    (default: wsluser)
   --location, -l <path>   WSL storage dir (default: C:\wsl-storage)
+  --bootstrap, -b <file>  Run commands from file after setup
+  --force,    -f          Overwrite existing WSL distro with same name
   --dry-run               Parse and print config, do not execute
   --help,     -h          Show help
 ```
@@ -52,6 +54,12 @@ container2wsl.bat ubuntu:22.04 --name my-dev --user alice
 
 :: Custom storage location
 container2wsl.bat debian:bookworm --location D:\wsl-distros
+
+:: Run bootstrap commands after setup
+container2wsl.bat ubuntu:22.04 --bootstrap setup.sh
+
+:: Overwrite an existing distro
+container2wsl.bat ubuntu:22.04 --name my-dev --force
 
 :: Preview what would happen without executing
 container2wsl.bat fedora:39 --dry-run

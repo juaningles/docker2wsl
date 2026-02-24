@@ -109,6 +109,35 @@ call "%SCRIPT%" ubuntu:22.04 --name %C2W_TEST_ID%-success > "%OUT%" 2>&1
 call "%HELPERS%" assert_output_contains "%OUT%" "SUCCESS" "success-banner: SUCCESS in output"
 call "%HELPERS%" assert_output_contains "%OUT%" "wsl -d %C2W_TEST_ID%-success" "success-banner: start command shown"
 
+:: ============================================================
+::  8. Distro exists without --force → error
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m distro already exists without --force
+call :reset_mocks 2>nul
+set "C2W_MOCK_WSL_DISTRO_EXISTS=%C2W_TEST_ID%-exists"
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:22.04 --name %C2W_TEST_ID%-exists > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_nonzero "%_RC%" "exists-no-force: non-zero exit"
+call "%HELPERS%" assert_output_contains "%OUT%" "already exists" "exists-no-force: error mentions already exists"
+
+:: ============================================================
+::  9. Distro exists with --force → succeeds (unregisters first)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m distro exists with --force succeeds
+call :reset_mocks 2>nul
+set "C2W_MOCK_WSL_DISTRO_EXISTS=%C2W_TEST_ID%-forceit"
+set "C2W_MOCK_LOG=%C2W_TMPDIR%\mock_force_calls.log"
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+if exist "%C2W_MOCK_LOG%" del /f /q "%C2W_MOCK_LOG%" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:22.04 --name %C2W_TEST_ID%-forceit --force > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "force-overwrite: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Unregistering" "force-overwrite: unregister message shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "SUCCESS" "force-overwrite: success at end"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 
@@ -119,6 +148,7 @@ set "C2W_MOCK_CREATE_FAIL=0"
 set "C2W_MOCK_EXPORT_FAIL=0"
 set "C2W_MOCK_WSL_IMPORT_FAIL=0"
 set "C2W_MOCK_WSL_BASH_FAIL=0"
+set "C2W_MOCK_WSL_DISTRO_EXISTS="
 set "C2W_MOCK_CONTAINER_ID=mock-container-abc123"
 set "C2W_MOCK_LOG="
 exit /b 0

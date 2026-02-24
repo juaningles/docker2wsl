@@ -12,6 +12,8 @@ setlocal enabledelayedexpansion
 ::    --name,     -n <name>   WSL distro name (default: derived from image)
 ::    --user,     -u <user>   Default user   (default: wsluser)
 ::    --location, -l <path>   WSL storage    (default: C:\wsl-storage)
+::    --bootstrap, -b <file>  Run commands from file after setup
+::    --force,    -f          Overwrite existing WSL distro with same name
 ::    --dry-run               Parse and print config, do not execute
 ::    --help,     -h          Show this help
 :: ============================================================
@@ -25,12 +27,14 @@ set "DEFAULT_USER=wsluser"
 
 :: --- Runtime flags ---
 set "DRY_RUN=0"
+set "FORCE=0"
 
 :: --- Parsed values (empty until set) ---
 set "ARG_IMAGE="
 set "ARG_WSL_NAME="
 set "ARG_WSL_USER="
 set "ARG_WSL_LOCATION="
+set "ARG_BOOTSTRAP="
 
 :: ============================================================
 ::  ARGUMENT PARSING
@@ -40,12 +44,16 @@ if "%~1"==""           goto :after_parse
 if "%~1"=="--help"     goto :show_help_ok
 if "%~1"=="-h"         goto :show_help_ok
 if "%~1"=="--dry-run"  goto :arg_dryrun
+if "%~1"=="--force"    goto :arg_force
+if "%~1"=="-f"         goto :arg_force
 if "%~1"=="--name"     goto :arg_name
 if "%~1"=="-n"         goto :arg_name
 if "%~1"=="--user"     goto :arg_user
 if "%~1"=="-u"         goto :arg_user
 if "%~1"=="--location" goto :arg_location
 if "%~1"=="-l"         goto :arg_location
+if "%~1"=="--bootstrap" goto :arg_bootstrap
+if "%~1"=="-b"          goto :arg_bootstrap
 if not defined ARG_IMAGE goto :arg_image
 echo [ERROR] Unexpected argument: %~1
 echo.
@@ -53,6 +61,11 @@ goto :show_help_error
 
 :arg_dryrun
 set "DRY_RUN=1"
+shift
+goto :parse_args
+
+:arg_force
+set "FORCE=1"
 shift
 goto :parse_args
 
@@ -71,6 +84,10 @@ if "%~2"=="--user" goto :arg_name_invalid
 if "%~2"=="-u" goto :arg_name_invalid
 if "%~2"=="--location" goto :arg_name_invalid
 if "%~2"=="-l" goto :arg_name_invalid
+if "%~2"=="--bootstrap" goto :arg_name_invalid
+if "%~2"=="-b" goto :arg_name_invalid
+if "%~2"=="--force" goto :arg_name_invalid
+if "%~2"=="-f" goto :arg_name_invalid
 set "ARG_WSL_NAME=%~2"
 shift
 shift
@@ -96,6 +113,10 @@ if "%~2"=="--user" goto :arg_user_invalid
 if "%~2"=="-u" goto :arg_user_invalid
 if "%~2"=="--location" goto :arg_user_invalid
 if "%~2"=="-l" goto :arg_user_invalid
+if "%~2"=="--bootstrap" goto :arg_user_invalid
+if "%~2"=="-b" goto :arg_user_invalid
+if "%~2"=="--force" goto :arg_user_invalid
+if "%~2"=="-f" goto :arg_user_invalid
 set "ARG_WSL_USER=%~2"
 shift
 shift
@@ -121,12 +142,45 @@ if "%~2"=="--user" goto :arg_location_invalid
 if "%~2"=="-u" goto :arg_location_invalid
 if "%~2"=="--location" goto :arg_location_invalid
 if "%~2"=="-l" goto :arg_location_invalid
+if "%~2"=="--bootstrap" goto :arg_location_invalid
+if "%~2"=="-b" goto :arg_location_invalid
+if "%~2"=="--force" goto :arg_location_invalid
+if "%~2"=="-f" goto :arg_location_invalid
 set "ARG_WSL_LOCATION=%~2"
 shift
 shift
 goto :parse_args
 
 :arg_location_invalid
+echo [ERROR] Missing value for option: %~1
+echo.
+goto :show_help_error
+
+:arg_bootstrap
+if "%~2"=="" (
+    echo [ERROR] Missing value for option: %~1
+    echo.
+    goto :show_help_error
+)
+if "%~2"=="--help" goto :arg_bootstrap_invalid
+if "%~2"=="-h" goto :arg_bootstrap_invalid
+if "%~2"=="--dry-run" goto :arg_bootstrap_invalid
+if "%~2"=="--name" goto :arg_bootstrap_invalid
+if "%~2"=="-n" goto :arg_bootstrap_invalid
+if "%~2"=="--user" goto :arg_bootstrap_invalid
+if "%~2"=="-u" goto :arg_bootstrap_invalid
+if "%~2"=="--location" goto :arg_bootstrap_invalid
+if "%~2"=="-l" goto :arg_bootstrap_invalid
+if "%~2"=="--bootstrap" goto :arg_bootstrap_invalid
+if "%~2"=="-b" goto :arg_bootstrap_invalid
+if "%~2"=="--force" goto :arg_bootstrap_invalid
+if "%~2"=="-f" goto :arg_bootstrap_invalid
+set "ARG_BOOTSTRAP=%~2"
+shift
+shift
+goto :parse_args
+
+:arg_bootstrap_invalid
 echo [ERROR] Missing value for option: %~1
 echo.
 goto :show_help_error
@@ -178,6 +232,8 @@ echo Options:
 echo  --name,     -n NAME  WSL distribution name (default: derived from image)
 echo  --user,     -u USER  Default Linux user    (default: %DEFAULT_USER%)
 echo  --location, -l PATH  WSL storage root      (default: %DEFAULT_STORAGE%)
+echo  --bootstrap, -b FILE Run commands from FILE after setup
+echo  --force,    -f       Overwrite existing WSL distro with same name
 echo  --dry-run            Show resolved config without executing
 echo  --help,     -h       Show this help
 echo.
@@ -205,14 +261,36 @@ echo  Image    : %ARG_IMAGE%
 echo  WSL Name : %ARG_WSL_NAME%
 echo  User     : %ARG_WSL_USER%
 echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
+if defined ARG_BOOTSTRAP echo  Bootstrap: %ARG_BOOTSTRAP%
+if %FORCE%==1 echo  Force    : yes (overwrite existing distro)
 if %DRY_RUN%==1 echo  Mode     : DRY RUN (no changes will be made)
 echo  ----------------------------------------
 echo.
 
-if %DRY_RUN%==1 (
-    echo [DRY-RUN] All steps skipped.
+if %DRY_RUN%==0 goto :after_dryrun
+if defined ARG_BOOTSTRAP call :dryrun_bootstrap
+echo [DRY-RUN] All steps skipped.
+exit /b 0
+
+:dryrun_bootstrap
+if not exist "%ARG_BOOTSTRAP%" (
+    echo [DRY-RUN] WARNING: Bootstrap file not found: %ARG_BOOTSTRAP%
+    echo.
     exit /b 0
 )
+echo [DRY-RUN] Bootstrap commands from: %ARG_BOOTSTRAP%
+for /f "usebackq delims=" %%L in ("%ARG_BOOTSTRAP%") do (
+    set "_BS_LINE=%%L"
+    if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" echo   %%L
+)
+echo.
+exit /b 0
+
+:after_dryrun
+
+:: --- Determine step count ---
+set "STEP_COUNT=4"
+if defined ARG_BOOTSTRAP set "STEP_COUNT=5"
 
 :: --- Step 1: Ensure Docker image is available locally ---
 call :docker_ensure_image "%ARG_IMAGE%"
@@ -242,6 +320,17 @@ if not exist "%INSTALL_PATH%\" (
     echo       Directory exists: %INSTALL_PATH%
 )
 
+:: --- Check if distro already exists ---
+call :wsl_distro_exists "%ARG_WSL_NAME%"
+if %errorlevel% equ 0 (
+    if %FORCE%==0 (
+        echo [ERROR] WSL distribution '%ARG_WSL_NAME%' already exists. Use --force to overwrite.
+        exit /b 1
+    )
+    echo       Unregistering existing distro '%ARG_WSL_NAME%'...
+    call %WSL_CMD% --unregister "%ARG_WSL_NAME%" >nul 2>&1
+)
+
 :: --- Step 4: Import tar as WSL distribution ---
 call :wsl_import "%ARG_WSL_NAME%" "%INSTALL_PATH%" "%EXPORT_TAR%"
 if errorlevel 1 (
@@ -254,6 +343,15 @@ call :wsl_configure_user "%ARG_WSL_NAME%" "%ARG_WSL_USER%"
 if errorlevel 1 (
     echo [ERROR] Failed to configure default user.
     exit /b 1
+)
+
+:: --- Step 6 (optional): Run bootstrap commands ---
+if defined ARG_BOOTSTRAP (
+    call :wsl_bootstrap "%ARG_WSL_NAME%" "%ARG_BOOTSTRAP%"
+    if errorlevel 1 (
+        echo [ERROR] Bootstrap failed.
+        exit /b 1
+    )
 )
 
 :: --- Cleanup temp tar ---
@@ -274,7 +372,7 @@ exit /b 0
 :docker_ensure_image
 :: Check if image exists locally; pull if not.
 :: %~1 = image name
-echo [1/4] Checking for local Docker image: %~1
+echo [1/%STEP_COUNT%] Checking for local Docker image: %~1
 call %DOCKER_CMD% image inspect "%~1" >nul 2>&1
 if %errorlevel% equ 0 (
     echo       Found locally.
@@ -293,7 +391,7 @@ exit /b 0
 :docker_export_image
 :: Create a temporary container and export its filesystem to a tar file.
 :: %~1 = image name   %~2 = output tar path
-echo [2/4] Exporting image to: %~2
+echo [2/%STEP_COUNT%] Exporting image to: %~2
 set "_TMP_CONTAINER="
 for /f "usebackq tokens=*" %%c in (`%DOCKER_CMD% create "%~1" 2^>nul`) do (
     set "_TMP_CONTAINER=%%c"
@@ -332,7 +430,7 @@ exit /b 0
 :wsl_import
 :: Import a tar archive as a WSL 2 distribution.
 :: %~1 = distro name   %~2 = install path   %~3 = tar file
-echo [3/4] Importing WSL distribution '%~1'...
+echo [3/%STEP_COUNT%] Importing WSL distribution '%~1'...
 set "_WIMPORT_TMP=%TEMP%\c2w_wslimport.tmp"
 call %WSL_CMD% --import "%~1" "%~2" "%~3" --version 2 > "%_WIMPORT_TMP%" 2>&1
 set "_WIMPORT_RC=%errorlevel%"
@@ -356,7 +454,7 @@ exit /b 0
 :wsl_configure_user
 :: Create user (if absent) and set as default in /etc/wsl.conf.
 :: %~1 = distro name   %~2 = username
-echo [4/4] Configuring default user '%~2'...
+echo [4/%STEP_COUNT%] Configuring default user '%~2'...
 
 :: WSL may need a moment after import before accepting commands; retry until ready.
 :: WSL returns exit 0 even on failure, so we capture output and check for errors.
@@ -421,4 +519,59 @@ call %WSL_CMD% -d %~1 -u root -- sed -i "s/\r//" /etc/wsl.conf >nul 2>&1
 call %WSL_CMD% --terminate "%~1" >nul 2>&1
 
 echo       Default user set to '%~2'. Run 'wsl -d %~1' to verify.
+exit /b 0
+
+
+:wsl_distro_exists
+:: Check if a WSL distribution is already registered.
+:: %~1 = distro name
+:: Returns exit 0 if found, exit 1 if not found.
+set "_WDE_TMP=%TEMP%\c2w_wsllist.tmp"
+set "_WDE_ASCII=%TEMP%\c2w_wslascii.tmp"
+call %WSL_CMD% --list --quiet > "%_WDE_TMP%" 2>&1
+powershell -noprofile -command "Get-Content -Path '%_WDE_TMP%' -Encoding Unicode 2>$null | Out-File -Encoding ascii '%_WDE_ASCII%'" 2>nul
+set "_WDE_FOUND=1"
+if not exist "%_WDE_ASCII%" goto :wde_cleanup
+for /f "usebackq tokens=*" %%n in ("%_WDE_ASCII%") do (
+    set "_WDE_NAME=%%n"
+    for /l %%i in (1,1,5) do if "!_WDE_NAME:~-1!"==" " set "_WDE_NAME=!_WDE_NAME:~0,-1!"
+    if /i "!_WDE_NAME!"=="%~1" set "_WDE_FOUND=0"
+)
+:wde_cleanup
+del /f /q "%_WDE_TMP%" "%_WDE_ASCII%" >nul 2>&1
+exit /b %_WDE_FOUND%
+
+
+:wsl_bootstrap
+:: Run commands from a bootstrap file inside the WSL distro.
+:: %~1 = distro name   %~2 = bootstrap file path
+echo [5/%STEP_COUNT%] Running bootstrap commands from: %~2
+if not exist "%~2" (
+    echo [ERROR] Bootstrap file not found: %~2
+    exit /b 1
+)
+set "_BS_COUNT=0"
+set "_BS_TMP=%TEMP%\c2w_bootstrap.tmp"
+for /f "usebackq delims=" %%L in ("%~2") do (
+    set "_BS_LINE=%%L"
+    if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
+        set /a _BS_COUNT+=1
+        echo       [!_BS_COUNT!] %%L
+        call %WSL_CMD% -d %~1 -u root -- %%L > "%_BS_TMP%" 2>&1
+        set "_BS_RC=!errorlevel!"
+        set "_BS_FAIL=0"
+        if !_BS_RC! neq 0 set "_BS_FAIL=1"
+        findstr /c:"E r r o r" "%_BS_TMP%" >nul 2>&1
+        if not errorlevel 1 set "_BS_FAIL=1"
+        if "!_BS_FAIL!"=="1" (
+            type "%_BS_TMP%"
+            del /f /q "%_BS_TMP%" >nul 2>&1
+            echo [ERROR] Bootstrap command failed: %%L
+            exit /b 1
+        )
+        type "%_BS_TMP%"
+        del /f /q "%_BS_TMP%" >nul 2>&1
+    )
+)
+echo       Bootstrap complete ^(!_BS_COUNT! commands executed^).
 exit /b 0
