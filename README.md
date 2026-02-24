@@ -65,6 +65,24 @@ container2wsl.bat ubuntu:22.04 --name my-dev --force
 container2wsl.bat fedora:39 --dry-run
 ```
 
+## Bootstrap Files
+
+Bootstrap files let you automate post-install setup by running commands inside the new WSL distro. Each line in the file is executed as root, in order. Execution stops on the first command that fails.
+
+- Use `--bootstrap` / `-b` to specify a file (repeatable for multiple files)
+- Lines starting with `#` are treated as comments and skipped
+- Empty lines are skipped
+- Multiple `--bootstrap` flags are processed in the order given
+- Use `--dry-run` to preview which commands would run without executing
+
+```cmd
+:: Single bootstrap file
+container2wsl.bat ubuntu:22.04 --bootstrap setup.sh
+
+:: Multiple files run in sequence
+container2wsl.bat ubuntu:22.04 --bootstrap packages.sh --bootstrap config.sh
+```
+
 ## Bootstrap Variables
 
 Bootstrap files support `%VAR%` expansion. The following built-in variables are available, along with any standard environment variables:
