@@ -1,0 +1,3 @@
+apt-get update
+apt-get install -y sudo
+echo "%C2W_USER% ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
