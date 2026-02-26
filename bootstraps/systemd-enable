@@ -1,0 +1,5 @@
+# Enable systemd in /etc/wsl.conf.
+# Requires WSL 0.67.6+ (Windows 11 or updated Windows 10).
+# The distro must be restarted (wsl --terminate <name>) for this to take effect.
+grep -qxF '[boot]' /etc/wsl.conf 2>/dev/null || printf '\n[boot]\nsystemd=true\n' >> /etc/wsl.conf
+sed -i 's/^systemd=false/systemd=true/' /etc/wsl.conf

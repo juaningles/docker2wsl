@@ -209,6 +209,77 @@ set "_RC=%errorlevel%"
 call "%HELPERS%" assert_exit_zero "%_RC%" "var-dryrun: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "dryuser" "var-dryrun: C2W_USER expanded in dry-run output"
 
+:: ============================================================
+::  12. devtools built-in bootstrap (ubuntu:latest)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m devtools built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-devtools --bootstrap "%~dp0..\bootstraps\devtools" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "devtools: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "devtools: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "apt-get install" "devtools: apt-get install shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "jq" "devtools: jq in command list"
+
+:: ============================================================
+::  13. zsh built-in bootstrap (ubuntu:latest)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m zsh built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-zsh --bootstrap "%~dp0..\bootstraps\zsh" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "zsh: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "zsh: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "chsh" "zsh: chsh command shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "wsluser" "zsh: C2W_USER expanded to default wsluser"
+
+:: ============================================================
+::  14. systemd-enable built-in bootstrap (ubuntu:latest)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m systemd-enable built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-systemd --bootstrap "%~dp0..\bootstraps\systemd-enable" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "systemd-enable: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "systemd-enable: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "systemd=true" "systemd-enable: systemd=true shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "wsl.conf" "systemd-enable: wsl.conf referenced"
+
+:: ============================================================
+::  15. sudo built-in bootstrap (ubuntu:latest)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m sudo built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-sudo --bootstrap "%~dp0..\bootstraps\sudo" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "sudo: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "sudo: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "apt-get install" "sudo: apt-get install shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "NOPASSWD" "sudo: sudoers line shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "wsluser" "sudo: C2W_USER expanded to default wsluser"
+
+:: ============================================================
+::  16. homebrew built-in bootstrap (ubuntu:latest)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m homebrew built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-homebrew --bootstrap "%~dp0..\bootstraps\homebrew" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "homebrew: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "homebrew: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "build-essential" "homebrew: build-essential shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "Homebrew" "homebrew: Homebrew install command shown"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 
