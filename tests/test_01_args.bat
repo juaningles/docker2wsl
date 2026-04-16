@@ -85,4 +85,50 @@ call "%SCRIPT%" ubuntu:22.04 --bogus-flag > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 call "%HELPERS%" assert_exit_nonzero "%_RC%" "unknown-flag: non-zero exit"
 
+:: ============================================================
+::  Bootstrap path resolution tests (--dry-run, no mocks)
+:: ============================================================
+
+:: ---- Test: bare bootstrap name resolves to script_dir\bootstraps\ ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bare bootstrap name resolves via script dir
+call "%SCRIPT%" ubuntu:22.04 --dry-run -b sudo > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-bare: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "bootstraps\sudo" "resolve-bare: resolved to bootstraps\sudo"
+call "%HELPERS%" assert_output_contains "%OUT%" "NOPASSWD" "resolve-bare: sudo commands listed"
+
+:: ---- Test: multiple bare names all resolve ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m multiple bare bootstrap names resolve
+call "%SCRIPT%" ubuntu:22.04 --dry-run -b zsh -b devtools > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-multi-bare: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "chsh" "resolve-multi-bare: zsh commands listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "jq" "resolve-multi-bare: devtools commands listed"
+
+:: ---- Test: bare name that doesn't exist warns ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m nonexistent bare bootstrap name warns in dry-run
+call "%SCRIPT%" ubuntu:22.04 --dry-run -b totally_bogus_bootstrap > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-bogus: exit 0 (dry-run)"
+call "%HELPERS%" assert_output_contains "%OUT%" "WARNING" "resolve-bogus: warning shown for missing file"
+
+:: ---- Test: mix of bare name and explicit path ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m mixed bare and explicit bootstrap paths
+set "_BS_FILE=%C2W_TMPDIR%\bootstrap_explicit.txt"
+(echo echo explicit_cmd) > "%_BS_FILE%"
+call "%SCRIPT%" ubuntu:22.04 --dry-run -b sudo -b "%_BS_FILE%" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-mixed: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "NOPASSWD" "resolve-mixed: bare sudo resolved"
+call "%HELPERS%" assert_output_contains "%OUT%" "explicit_cmd" "resolve-mixed: explicit path works"
+
+:: ---- Test: bootstraps\ prefix resolves from different CWD ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bootstraps\name resolves from different CWD
+pushd "%TEMP%"
+call "%SCRIPT%" ubuntu:22.04 --dry-run -b bootstraps\systemd-enable > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+popd
+call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-subdir: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "systemd=true" "resolve-subdir: systemd-enable commands listed"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"

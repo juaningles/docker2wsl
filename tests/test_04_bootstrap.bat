@@ -267,18 +267,32 @@ call "%HELPERS%" assert_output_contains "%OUT%" "NOPASSWD" "sudo: sudoers line s
 call "%HELPERS%" assert_output_contains "%OUT%" "wsluser" "sudo: C2W_USER expanded to default wsluser"
 
 :: ============================================================
-::  16. homebrew built-in bootstrap (ubuntu:latest)
+::  16. Bare bootstrap name resolves and executes
 :: ============================================================
-echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m homebrew built-in bootstrap
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bare bootstrap name resolves and executes
 call :reset_mocks 2>nul
 copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
 
-call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-homebrew --bootstrap "%~dp0..\bootstraps\homebrew" > "%OUT%" 2>&1
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-barebs -b sudo > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
-call "%HELPERS%" assert_exit_zero "%_RC%" "homebrew: exit 0"
-call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "homebrew: bootstrap complete message"
-call "%HELPERS%" assert_output_contains "%OUT%" "build-essential" "homebrew: build-essential shown"
-call "%HELPERS%" assert_output_contains "%OUT%" "Homebrew" "homebrew: Homebrew install command shown"
+call "%HELPERS%" assert_exit_zero "%_RC%" "bare-resolve-exec: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "NOPASSWD" "bare-resolve-exec: sudo commands shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "bare-resolve-exec: bootstrap complete message"
+
+:: ============================================================
+::  17. Bare bootstrap name resolves from different CWD
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bare bootstrap name resolves from different CWD
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+pushd "%TEMP%"
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-barecwd -b systemd-enable > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+popd
+call "%HELPERS%" assert_exit_zero "%_RC%" "bare-cwd-exec: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "systemd=true" "bare-cwd-exec: systemd-enable commands shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "bare-cwd-exec: bootstrap complete message"
 
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
