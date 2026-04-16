@@ -7,11 +7,13 @@ Single file (`container2wsl.bat`), no dependencies beyond Docker and WSL.
 
 ## Architecture
 
-The main script runs 4 sequential steps via `call :subroutine` labels:
+The main script runs 4-6 sequential steps via `call :subroutine` labels:
 1. `docker_ensure_image` - check local / pull from registry
 2. `docker_export_image` - `docker create` + `docker export` to tar
 3. `wsl_import` - `wsl --import` with error detection
 4. `wsl_configure_user` - create user, write `/etc/wsl.conf`, restart distro
+5. `wsl_bootstrap` (optional) - run bootstrap file commands as root
+6. `wsl_poststrap` (optional) - run poststrap file commands as user
 
 ## Critical WSL Quirks
 
@@ -34,7 +36,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (51 assertions)
+tests\run_tests.bat                        # run all (169 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -46,6 +48,8 @@ tests\run_tests.bat --force                # skip collision pre-check
 - Post-run automatically unregisters any `c2wt*` distros and cleans storage dirs
 - `test_01_args` uses `--dry-run` only (no mocks needed)
 - `test_02_docker` and `test_03_wsl` use mocks
+- `test_04_bootstrap` tests bootstrap execution (mocked)
+- `test_05_poststrap` tests poststrap execution (mocked)
 - Assertion helpers use `setlocal enabledelayedexpansion` + flat `if/goto` to avoid block-parsing bugs
 - ANSI colors in output: green PASS, red FAIL, yellow test headers, cyan file names
 
@@ -53,12 +57,20 @@ tests\run_tests.bat --force                # skip collision pre-check
 
 ```
 container2wsl.bat            # main script (the only file users need)
+bootstraps/
+  devtools                   # git, curl, build-essential, jq, etc.
+  homebrew                   # Linuxbrew + dependencies
+  sudo                       # install sudo + passwordless sudoers entry
+  systemd-enable             # enable systemd in wsl.conf
+  zsh                        # zsh + Oh My Zsh
 tests/
   run_tests.bat              # test runner with --html, --force, pre-flight checks
   helpers.bat                # assertion library (10 assertion types)
   test_01_args.bat           # argument parsing tests (--dry-run, no mocks)
   test_02_docker.bat         # docker step tests (mocked)
   test_03_wsl.bat            # wsl import + user config tests (mocked)
+  test_04_bootstrap.bat      # bootstrap feature tests (mocked)
+  test_05_poststrap.bat      # poststrap feature tests (mocked)
   mocks/
     docker.bat               # mock docker (controlled via C2W_MOCK_* vars)
     wsl.bat                  # mock wsl (controlled via C2W_MOCK_* vars)

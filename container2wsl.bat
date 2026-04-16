@@ -12,7 +12,8 @@ setlocal enabledelayedexpansion
 ::    --name,     -n <name>   WSL distro name (default: derived from image)
 ::    --user,     -u <user>   Default user   (default: wsluser)
 ::    --location, -l <path>   WSL storage    (default: C:\wsl-storage)
-::    --bootstrap, -b <file>  Run commands from file after setup (repeatable)
+::    --bootstrap, -b <file>  Run commands from file as root after setup (repeatable)
+::    --poststrap, -p <file>  Run commands from file as user after setup (repeatable)
 ::    --force,    -f          Overwrite existing WSL distro with same name
 ::    --dry-run               Parse and print config, do not execute
 ::    --help,     -h          Show this help
@@ -42,6 +43,7 @@ set "ARG_WSL_NAME="
 set "ARG_WSL_USER="
 set "ARG_WSL_LOCATION="
 set "ARG_BOOTSTRAP_N=0"
+set "ARG_POSTSTRAP_N=0"
 
 :: ============================================================
 ::  ARGUMENT PARSING
@@ -61,6 +63,8 @@ if "%~1"=="--location" goto :arg_location
 if "%~1"=="-l"         goto :arg_location
 if "%~1"=="--bootstrap" goto :arg_bootstrap
 if "%~1"=="-b"          goto :arg_bootstrap
+if "%~1"=="--poststrap" goto :arg_poststrap
+if "%~1"=="-p"          goto :arg_poststrap
 if not defined ARG_IMAGE goto :arg_image
 echo [ERROR] Unexpected argument: %~1
 echo.
@@ -93,6 +97,8 @@ if "%~2"=="--location" goto :arg_name_invalid
 if "%~2"=="-l" goto :arg_name_invalid
 if "%~2"=="--bootstrap" goto :arg_name_invalid
 if "%~2"=="-b" goto :arg_name_invalid
+if "%~2"=="--poststrap" goto :arg_name_invalid
+if "%~2"=="-p" goto :arg_name_invalid
 if "%~2"=="--force" goto :arg_name_invalid
 if "%~2"=="-f" goto :arg_name_invalid
 set "ARG_WSL_NAME=%~2"
@@ -122,6 +128,8 @@ if "%~2"=="--location" goto :arg_user_invalid
 if "%~2"=="-l" goto :arg_user_invalid
 if "%~2"=="--bootstrap" goto :arg_user_invalid
 if "%~2"=="-b" goto :arg_user_invalid
+if "%~2"=="--poststrap" goto :arg_user_invalid
+if "%~2"=="-p" goto :arg_user_invalid
 if "%~2"=="--force" goto :arg_user_invalid
 if "%~2"=="-f" goto :arg_user_invalid
 set "ARG_WSL_USER=%~2"
@@ -151,6 +159,8 @@ if "%~2"=="--location" goto :arg_location_invalid
 if "%~2"=="-l" goto :arg_location_invalid
 if "%~2"=="--bootstrap" goto :arg_location_invalid
 if "%~2"=="-b" goto :arg_location_invalid
+if "%~2"=="--poststrap" goto :arg_location_invalid
+if "%~2"=="-p" goto :arg_location_invalid
 if "%~2"=="--force" goto :arg_location_invalid
 if "%~2"=="-f" goto :arg_location_invalid
 set "ARG_WSL_LOCATION=%~2"
@@ -180,6 +190,8 @@ if "%~2"=="--location" goto :arg_bootstrap_invalid
 if "%~2"=="-l" goto :arg_bootstrap_invalid
 if "%~2"=="--bootstrap" goto :arg_bootstrap_invalid
 if "%~2"=="-b" goto :arg_bootstrap_invalid
+if "%~2"=="--poststrap" goto :arg_bootstrap_invalid
+if "%~2"=="-p" goto :arg_bootstrap_invalid
 if "%~2"=="--force" goto :arg_bootstrap_invalid
 if "%~2"=="-f" goto :arg_bootstrap_invalid
 set /a ARG_BOOTSTRAP_N+=1
@@ -189,6 +201,38 @@ shift
 goto :parse_args
 
 :arg_bootstrap_invalid
+echo [ERROR] Missing value for option: %~1
+echo.
+goto :show_help_error
+
+:arg_poststrap
+if "%~2"=="" (
+    echo [ERROR] Missing value for option: %~1
+    echo.
+    goto :show_help_error
+)
+if "%~2"=="--help" goto :arg_poststrap_invalid
+if "%~2"=="-h" goto :arg_poststrap_invalid
+if "%~2"=="--dry-run" goto :arg_poststrap_invalid
+if "%~2"=="--name" goto :arg_poststrap_invalid
+if "%~2"=="-n" goto :arg_poststrap_invalid
+if "%~2"=="--user" goto :arg_poststrap_invalid
+if "%~2"=="-u" goto :arg_poststrap_invalid
+if "%~2"=="--location" goto :arg_poststrap_invalid
+if "%~2"=="-l" goto :arg_poststrap_invalid
+if "%~2"=="--bootstrap" goto :arg_poststrap_invalid
+if "%~2"=="-b" goto :arg_poststrap_invalid
+if "%~2"=="--poststrap" goto :arg_poststrap_invalid
+if "%~2"=="-p" goto :arg_poststrap_invalid
+if "%~2"=="--force" goto :arg_poststrap_invalid
+if "%~2"=="-f" goto :arg_poststrap_invalid
+set /a ARG_POSTSTRAP_N+=1
+set "ARG_POSTSTRAP_!ARG_POSTSTRAP_N!=%~2"
+shift
+shift
+goto :parse_args
+
+:arg_poststrap_invalid
 echo [ERROR] Missing value for option: %~1
 echo.
 goto :show_help_error
@@ -218,7 +262,39 @@ if not defined ARG_WSL_NAME (
     set "ARG_WSL_NAME=!ARG_WSL_NAME:\=-!"
 )
 
+:: --- Resolve bootstrap paths: try <script_dir>\bootstraps\<name> if not found as-is ---
+if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do call :resolve_bootstrap %%i
+
+:: --- Resolve poststrap paths: same logic as bootstrap ---
+if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do call :resolve_poststrap %%i
+
 goto :main
+
+:resolve_bootstrap
+set "_RB_VAL=!ARG_BOOTSTRAP_%~1!"
+if exist "%_RB_VAL%" goto :eof
+if exist "%~dp0bootstraps\%_RB_VAL%" (
+    set "ARG_BOOTSTRAP_%~1=%~dp0bootstraps\%_RB_VAL%"
+    goto :eof
+)
+if exist "%~dp0%_RB_VAL%" (
+    set "ARG_BOOTSTRAP_%~1=%~dp0%_RB_VAL%"
+    goto :eof
+)
+goto :eof
+
+:resolve_poststrap
+set "_RB_VAL=!ARG_POSTSTRAP_%~1!"
+if exist "%_RB_VAL%" goto :eof
+if exist "%~dp0poststraps\%_RB_VAL%" (
+    set "ARG_POSTSTRAP_%~1=%~dp0poststraps\%_RB_VAL%"
+    goto :eof
+)
+if exist "%~dp0%_RB_VAL%" (
+    set "ARG_POSTSTRAP_%~1=%~dp0%_RB_VAL%"
+    goto :eof
+)
+goto :eof
 
 :: ============================================================
 :show_help_ok
@@ -240,7 +316,8 @@ echo Options:
 echo  --name,     -n NAME  WSL distribution name (default: derived from image)
 echo  --user,     -u USER  Default Linux user    (default: %DEFAULT_USER%)
 echo  --location, -l PATH  WSL storage root      (default: %DEFAULT_STORAGE%)
-echo  --bootstrap, -b FILE Run commands from FILE after setup (repeatable)
+echo  --bootstrap, -b FILE Run commands from FILE as root after setup (repeatable)
+echo  --poststrap, -p FILE Run commands from FILE as user after setup (repeatable)
 echo  --force,    -f       Overwrite existing WSL distro with same name
 echo  --dry-run            Show resolved config without executing
 echo  --help,     -h       Show this help
@@ -270,6 +347,7 @@ echo  WSL Name : %ARG_WSL_NAME%
 echo  User     : %ARG_WSL_USER%
 echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
 if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do echo  Bootstrap: !ARG_BOOTSTRAP_%%i!
+if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do echo  Poststrap: !ARG_POSTSTRAP_%%i!
 if %FORCE%==1 echo  Force    : yes (overwrite existing distro)
 if %DRY_RUN%==1 echo  Mode     : DRY RUN (no changes will be made)
 echo  ----------------------------------------
@@ -282,6 +360,7 @@ set "C2W_USER=%ARG_WSL_USER%"
 set "C2W_IMAGE=%ARG_IMAGE%"
 set "C2W_LOCATION=%ARG_WSL_LOCATION%"
 if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do call :dryrun_bootstrap "!ARG_BOOTSTRAP_%%i!"
+if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do call :dryrun_poststrap "!ARG_POSTSTRAP_%%i!"
 echo [DRY-RUN] All steps skipped.
 exit /b 0
 
@@ -291,7 +370,24 @@ if not exist "%~1" (
     echo.
     exit /b 0
 )
-echo [DRY-RUN] Bootstrap commands from: %~1
+echo [DRY-RUN] Bootstrap commands from: %~1 (as root)
+for /f "usebackq delims=" %%L in ("%~1") do (
+    set "_BS_LINE=%%L"
+    if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
+        call set "_BS_EXPANDED=!_BS_LINE!"
+        echo   !_BS_EXPANDED!
+    )
+)
+echo.
+exit /b 0
+
+:dryrun_poststrap
+if not exist "%~1" (
+    echo [DRY-RUN] WARNING: Poststrap file not found: %~1
+    echo.
+    exit /b 0
+)
+echo [DRY-RUN] Poststrap commands from: %~1 (as %C2W_USER%)
 for /f "usebackq delims=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
@@ -306,7 +402,8 @@ exit /b 0
 
 :: --- Determine step count ---
 set "STEP_COUNT=4"
-if %ARG_BOOTSTRAP_N% geq 1 set "STEP_COUNT=5"
+if %ARG_BOOTSTRAP_N% geq 1 set /a STEP_COUNT+=1
+if %ARG_POSTSTRAP_N% geq 1 set /a STEP_COUNT+=1
 
 :: --- Step 1: Ensure Docker image is available locally ---
 call :docker_ensure_image "%ARG_IMAGE%"
@@ -372,13 +469,31 @@ set "C2W_NAME=%ARG_WSL_NAME%"
 set "C2W_USER=%ARG_WSL_USER%"
 set "C2W_IMAGE=%ARG_IMAGE%"
 set "C2W_LOCATION=%ARG_WSL_LOCATION%"
+set "_NEXT_STEP=5"
 if %ARG_BOOTSTRAP_N% geq 1 (
+    set "BOOTSTRAP_STEP=!_NEXT_STEP!"
+    set /a _NEXT_STEP+=1
     set "_BS_IDX=0"
     for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do (
         set /a _BS_IDX+=1
-        call :wsl_bootstrap "%ARG_WSL_NAME%" "!ARG_BOOTSTRAP_%%i!" !_BS_IDX! %ARG_BOOTSTRAP_N%
+        call :wsl_bootstrap "%ARG_WSL_NAME%" "!ARG_BOOTSTRAP_%%i!" !_BS_IDX! %ARG_BOOTSTRAP_N% !BOOTSTRAP_STEP!
         if errorlevel 1 (
             echo [ERROR] Bootstrap failed.
+            exit /b 1
+        )
+    )
+)
+
+:: --- Step 7 (optional): Run poststrap commands (as user) ---
+if %ARG_POSTSTRAP_N% geq 1 (
+    set "POSTSTRAP_STEP=!_NEXT_STEP!"
+    set /a _NEXT_STEP+=1
+    set "_PS_IDX=0"
+    for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do (
+        set /a _PS_IDX+=1
+        call :wsl_poststrap "%ARG_WSL_NAME%" "!ARG_POSTSTRAP_%%i!" !_PS_IDX! %ARG_POSTSTRAP_N% !POSTSTRAP_STEP! "%ARG_WSL_USER%"
+        if errorlevel 1 (
+            echo [ERROR] Poststrap failed.
             exit /b 1
         )
     )
@@ -604,12 +719,12 @@ exit /b 0
 
 
 :wsl_bootstrap
-:: Run commands from a bootstrap file inside the WSL distro.
-:: %~1 = distro name   %~2 = bootstrap file path   %~3 = file index   %~4 = total files
+:: Run commands from a bootstrap file inside the WSL distro (as root).
+:: %~1 = distro name   %~2 = bootstrap file path   %~3 = file index   %~4 = total files   %~5 = step number
 if "%~4"=="1" (
-    echo [5/%STEP_COUNT%] Running bootstrap commands from: %~2
+    echo [%~5/%STEP_COUNT%] Running bootstrap commands from: %~2
 ) else (
-    echo [5/%STEP_COUNT%] Running bootstrap file %~3/%~4: %~2
+    echo [%~5/%STEP_COUNT%] Running bootstrap file %~3/%~4: %~2
 )
 if not exist "%~2" (
     echo [ERROR] Bootstrap file not found: %~2
@@ -656,4 +771,59 @@ if "!_BS_FAIL!"=="1" (
     exit /b 1
 )
 echo       Bootstrap complete ^(!_BS_COUNT! commands executed^).
+exit /b 0
+
+
+:wsl_poststrap
+:: Run commands from a poststrap file inside the WSL distro (as user).
+:: %~1 = distro name   %~2 = poststrap file path   %~3 = file index   %~4 = total files   %~5 = step number   %~6 = username
+if "%~4"=="1" (
+    echo [%~5/%STEP_COUNT%] Running poststrap commands from: %~2 (as %~6)
+) else (
+    echo [%~5/%STEP_COUNT%] Running poststrap file %~3/%~4: %~2 (as %~6)
+)
+if not exist "%~2" (
+    echo [ERROR] Poststrap file not found: %~2
+    exit /b 1
+)
+set "_PS_COUNT=0"
+set "_PS_TMP=%TEMP%\c2w_poststrap.tmp"
+:: Count commands and display them (with variable expansion for user feedback)
+for /f "usebackq delims=" %%L in ("%~2") do (
+    set "_PS_LINE=%%L"
+    if not "!_PS_LINE!"=="" if not "!_PS_LINE:~0,1!"=="#" (
+        set /a _PS_COUNT+=1
+        call set "_PS_EXPANDED=!_PS_LINE!"
+        echo       [!_PS_COUNT!] !_PS_EXPANDED!
+    )
+)
+:: Use PowerShell to read the poststrap file, expand %VAR% references,
+:: strip comments/blanks, prepend "set -e", and write a clean .sh file
+:: with Unix line endings. Same as bootstrap but runs as user, not root.
+set "_PS_SH=%TEMP%\c2w_poststrap_cmd.sh"
+powershell -noprofile -command ^
+  "$lines = @('set -e'); " ^
+  "Get-Content -LiteralPath '%~2' -Encoding UTF8 | ForEach-Object { " ^
+  "  $l = $_.TrimEnd(); " ^
+  "  if ($l -and -not $l.StartsWith('#')) { " ^
+  "    $lines += [Environment]::ExpandEnvironmentVariables($l) " ^
+  "  } " ^
+  "}; " ^
+  "[IO.File]::WriteAllBytes('%_PS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
+set "_PS_SH_LX=%_PS_SH:\=/%"
+set "_PS_SH_LX=!_PS_SH_LX:C:/=/mnt/c/!"
+set "_PS_SH_LX=!_PS_SH_LX:c:/=/mnt/c/!"
+call %WSL_CMD% -d %~1 -u %~6 -- bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
+set "_PS_RC=!errorlevel!"
+set "_PS_FAIL=0"
+if !_PS_RC! neq 0 set "_PS_FAIL=1"
+findstr /c:"E r r o r" "%_PS_TMP%" >nul 2>&1
+if not errorlevel 1 set "_PS_FAIL=1"
+type "%_PS_TMP%"
+del /f /q "%_PS_TMP%" "%_PS_SH%" >nul 2>&1
+if "!_PS_FAIL!"=="1" (
+    echo [ERROR] Poststrap command failed.
+    exit /b 1
+)
+echo       Poststrap complete ^(!_PS_COUNT! commands executed^).
 exit /b 0

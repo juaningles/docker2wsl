@@ -1,4 +1,6 @@
 apt-get update
 apt-get install -y zsh curl git
 chsh -s /usr/bin/zsh %C2W_USER%
-su - %C2W_USER% -c "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\" --unattended"
+curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o /tmp/omz-install.sh
+su - %C2W_USER% -c "sh /tmp/omz-install.sh --unattended"
+rm -f /tmp/omz-install.sh

@@ -20,7 +20,9 @@ This will:
 2. Export a root filesystem tarball via `docker create` + `docker export`
 3. Import it into WSL with `wsl --import`
 4. Create a default user (`wsluser`) and configure `/etc/wsl.conf`
-5. Clean up temporary containers and tar files
+5. Run bootstrap commands as root (if `-b` specified)
+6. Run poststrap commands as user (if `-p` specified)
+7. Clean up temporary containers and tar files
 
 When finished, start your new distro:
 
@@ -37,7 +39,8 @@ Options:
   --name,     -n <name>   WSL distro name (default: derived from image)
   --user,     -u <user>   Default user    (default: wsluser)
   --location, -l <path>   WSL storage dir (default: C:\wsl-storage)
-  --bootstrap, -b <file>  Run commands from file after setup (repeatable)
+  --bootstrap, -b <file>  Run commands from file as root after setup (repeatable)
+  --poststrap, -p <file>  Run commands from file as user after setup (repeatable)
   --force,    -f          Overwrite existing WSL distro with same name
   --dry-run               Parse and print config, do not execute
   --help,     -h          Show help
@@ -58,6 +61,12 @@ container2wsl.bat debian:bookworm --location D:\wsl-distros
 :: Run bootstrap commands after setup (multiple files supported)
 container2wsl.bat ubuntu:22.04 --bootstrap packages.sh --bootstrap config.sh
 
+:: Use built-in bootstrap files by name (no path needed)
+container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
+
+:: Run poststrap commands as the created user (not root)
+container2wsl.bat ubuntu:22.04 -b sudo -p user-config.sh
+
 :: Overwrite an existing distro
 container2wsl.bat ubuntu:22.04 --name my-dev --force
 
@@ -67,13 +76,14 @@ container2wsl.bat fedora:39 --dry-run
 
 ## Bootstrap Files
 
-Bootstrap files let you automate post-install setup by running commands inside the new WSL distro. Each line in the file is executed as root, in order. Execution stops on the first command that fails.
+Bootstrap files let you automate post-install setup by running commands inside the new WSL distro. Each line in the file is executed as **root**, in order. Execution stops on the first command that fails.
 
 - Use `--bootstrap` / `-b` to specify a file (repeatable for multiple files)
 - Lines starting with `#` are treated as comments and skipped
 - Empty lines are skipped
 - Multiple `--bootstrap` flags are processed in the order given
 - Use `--dry-run` to preview which commands would run without executing
+- Bare names (e.g. `-b sudo`) auto-resolve to the built-in `bootstraps/` directory
 
 ```cmd
 :: Single bootstrap file
@@ -100,6 +110,36 @@ Example bootstrap file:
 # setup.sh
 useradd -m -s /bin/bash %C2W_USER%
 echo "Welcome to %C2W_NAME%" > /etc/motd
+```
+
+## Built-in Bootstraps
+
+The `bootstraps/` directory ships with ready-to-use files. Reference them by name:
+
+```cmd
+container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
+```
+
+| Name | What it does |
+|------|--------------|
+| `sudo` | Installs sudo, grants passwordless sudo to the created user |
+| `systemd-enable` | Enables systemd in `/etc/wsl.conf` |
+| `zsh` | Installs zsh, curl, git and Oh My Zsh for the created user |
+| `devtools` | Installs git, curl, build-essential, jq, and other dev tools |
+| `homebrew` | Installs Homebrew (Linuxbrew) and its dependencies |
+
+## Poststrap Files
+
+Poststrap files work like bootstrap files but run as the **created user** instead of root. This is useful for user-level configuration (dotfiles, shell setup, etc.).
+
+- Use `--poststrap` / `-p` to specify a file (repeatable for multiple files)
+- Same syntax as bootstrap: one command per line, `#` comments, `%VAR%` expansion
+- Runs after all bootstrap files complete
+- Bare names auto-resolve from `poststraps/` directory
+
+```cmd
+:: Install packages as root, then configure user environment
+container2wsl.bat ubuntu:22.04 -b sudo -b devtools -p user-setup.sh
 ```
 
 ## Testing

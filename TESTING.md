@@ -39,6 +39,11 @@ These tests use `--dry-run` mode, which parses arguments and prints the resolved
 | Name derivation | `/` and `:` in image name become `-` |
 | `--force` dry-run | Force label shown in config display |
 | Unknown flag | Exits non-zero |
+| Bare bootstrap name resolves | `-b sudo` resolves to `bootstraps\sudo`, commands listed |
+| Multiple bare names resolve | `-b zsh -b devtools` both resolve, commands listed |
+| Nonexistent bare name warns | `-b bogus` shows WARNING in dry-run |
+| Mixed bare + explicit path | `-b sudo -b <tmpfile>` both resolve |
+| `bootstraps\name` from different CWD | Resolves via script dir when CWD differs |
 
 ### `test_02_docker.bat` — Docker Operations (MOCKED docker + wsl)
 
@@ -86,6 +91,34 @@ Both mocks are active. The Docker mock always succeeds so only bootstrap behavio
 | Variable expansion | file with `%C2W_NAME%`, `%C2W_USER%` | Variables expanded in executed commands |
 | Env variable expansion | file with `%COMPUTERNAME%` | Standard env vars expanded |
 | Variables in dry-run | `--dry-run` + file with `%C2W_USER%` | Variables expanded in listed commands |
+| devtools built-in bootstrap | `bootstraps\devtools` path | Exit 0, apt-get install and jq shown |
+| zsh built-in bootstrap | `bootstraps\zsh` path | Exit 0, chsh shown, C2W_USER expanded |
+| systemd-enable built-in bootstrap | `bootstraps\systemd-enable` path | Exit 0, systemd=true shown |
+| sudo built-in bootstrap | `bootstraps\sudo` path | Exit 0, NOPASSWD shown, C2W_USER expanded |
+| Bare name resolves and executes | `-b sudo` (no path) | Resolves to script dir, exit 0, commands run |
+| Bare name resolves from different CWD | `pushd %TEMP%` + `-b systemd-enable` | Resolves via script dir even when CWD differs |
+
+### `test_05_poststrap.bat` — Poststrap Feature (MOCKED docker + wsl)
+
+Both mocks are active. The Docker mock always succeeds so only poststrap behavior is exercised.
+Poststrap runs commands as the created user (not root), unlike bootstrap.
+
+| Test | Setup | What it verifies |
+|------|-------|------------------|
+| Poststrap succeeds | 2-command file | Exit 0, commands shown, "Poststrap complete" message |
+| Poststrap file not found | nonexistent path | Non-zero exit, ERROR message |
+| Poststrap command fails | `WSL_BASH_FAIL=1` | Non-zero exit, ERROR message |
+| Poststrap shown in dry-run | `--dry-run --poststrap` | Exit 0, poststrap file and commands listed, shows user |
+| Comments and empty lines | file with `#`, blank, command | Only real command runs, comment not executed |
+| Multiple files in order | two `-p` flags | Both files run, file 1/2 and 2/2 headers shown |
+| Second file fails | first valid + second missing | Non-zero exit, ERROR message |
+| Variable expansion | file with `%C2W_NAME%`, `%C2W_USER%` | Variables expanded in executed commands |
+| Variables in dry-run | `--dry-run` + file with `%C2W_USER%` | Variables expanded in listed commands |
+| Username in header | `--user alice -p file` | Output contains "(as alice)" |
+| Bootstrap + poststrap combo | `-b file -p file` | Both Bootstrap complete and Poststrap complete |
+| `-p` shorthand | `-p file` | Poststrap complete shown |
+| Poststrap in config banner | `--dry-run -p file` | "Poststrap:" label in banner |
+| Homebrew built-in bootstrap | `bootstraps\homebrew` path | Exit 0, build-essential and Homebrew shown |
 
 ## Mock Details
 
