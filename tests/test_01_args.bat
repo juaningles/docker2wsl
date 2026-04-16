@@ -124,7 +124,7 @@ call "%HELPERS%" assert_output_contains "%OUT%" "explicit_cmd" "resolve-mixed: e
 
 :: ---- Test: bootstraps\ prefix resolves from different CWD ----
 echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bootstraps\name resolves from different CWD
-pushd %TEMP%
+pushd "%TEMP%"
 call "%SCRIPT%" ubuntu:22.04 --dry-run -b bootstraps\systemd-enable > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 popd
