@@ -484,7 +484,7 @@ if %ARG_BOOTSTRAP_N% geq 1 (
     )
 )
 
-:: --- Step 7 (optional): Run poststrap commands (as user) ---
+:: --- Optional: Run poststrap commands (as user) ---
 if %ARG_POSTSTRAP_N% geq 1 (
     set "POSTSTRAP_STEP=!_NEXT_STEP!"
     set /a _NEXT_STEP+=1
