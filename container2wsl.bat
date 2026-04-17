@@ -371,7 +371,7 @@ if not exist "%~1" (
     exit /b 0
 )
 echo [DRY-RUN] Bootstrap commands from: %~1 (as root)
-for /f "usebackq delims=" %%L in ("%~1") do (
+for /f "usebackq delims= eol=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
         call set "_BS_EXPANDED=!_BS_LINE!"
@@ -388,7 +388,7 @@ if not exist "%~1" (
     exit /b 0
 )
 echo [DRY-RUN] Poststrap commands from: %~1 (as %C2W_USER%)
-for /f "usebackq delims=" %%L in ("%~1") do (
+for /f "usebackq delims= eol=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
         call set "_BS_EXPANDED=!_BS_LINE!"
@@ -817,7 +817,7 @@ powershell -noprofile -command ^
 set "_PS_SH_LX=%_PS_SH:\=/%"
 set "_PS_SH_LX=!_PS_SH_LX:C:/=/mnt/c/!"
 set "_PS_SH_LX=!_PS_SH_LX:c:/=/mnt/c/!"
-call %WSL_CMD% -d %~1 -u %~6 -- bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
+call %WSL_CMD% -d %~1 -u "%~6" -- bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
 set "_PS_RC=!errorlevel!"
 set "_PS_FAIL=0"
 if !_PS_RC! neq 0 set "_PS_FAIL=1"

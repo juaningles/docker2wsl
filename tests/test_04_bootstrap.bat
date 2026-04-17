@@ -286,7 +286,7 @@ echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bare bootstrap name resolves from differe
 call :reset_mocks 2>nul
 copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
 
-pushd %TEMP%
+pushd "%TEMP%"
 call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-barecwd -b systemd-enable > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 popd
