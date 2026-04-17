@@ -131,4 +131,12 @@ popd
 call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-subdir: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "systemd=true" "resolve-subdir: systemd-enable commands listed"
 
+:: ---- Test: bare poststrap name resolves to script_dir\poststraps\ ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bare poststrap name resolves via script dir
+call "%SCRIPT%" ubuntu:22.04 --dry-run -p powerlevel10k > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-poststrap-bare: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "poststraps\powerlevel10k" "resolve-poststrap-bare: resolved to poststraps\powerlevel10k"
+call "%HELPERS%" assert_output_contains "%OUT%" "omz-install.sh" "resolve-poststrap-bare: oh-my-zsh install commands listed"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"

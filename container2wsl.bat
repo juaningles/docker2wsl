@@ -502,6 +502,10 @@ if %ARG_POSTSTRAP_N% geq 1 (
 :: --- Cleanup temp tar ---
 if exist "%EXPORT_TAR%" del /f /q "%EXPORT_TAR%" >nul 2>&1
 
+:: Stop the distro so the next interactive launch starts fresh and applies
+:: /etc/wsl.conf default-user settings deterministically.
+call %WSL_CMD% --terminate "%ARG_WSL_NAME%" >nul 2>&1
+
 echo.
 echo [SUCCESS] WSL distribution created.
 echo           Name   : %ARG_WSL_NAME%

@@ -126,7 +126,7 @@ container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
 | `systemd-enable` | Enables systemd in `/etc/wsl.conf` |
 | `zsh` | Installs zsh, curl, git and Oh My Zsh for the created user |
 | `devtools` | Installs git, curl, build-essential, jq, and other dev tools |
-| `homebrew` | Installs Homebrew (Linuxbrew) and its dependencies |
+| `homebrew` | Installs Homebrew (Linuxbrew), pre-creates the Linuxbrew prefix with the right ownership, and adds `brew shellenv` to `~/.profile` |
 
 ## Poststrap Files
 
@@ -136,11 +136,26 @@ Poststrap files work like bootstrap files but run as the **created user** instea
 - Same syntax as bootstrap: one command per line, `#` comments, `%VAR%` expansion
 - Runs after all bootstrap files complete
 - Bare names auto-resolve from `poststraps/` directory
+- Intended for user-level setup such as shell themes, dotfiles, and editor config
 
 ```cmd
 :: Install packages as root, then configure user environment
 container2wsl.bat ubuntu:22.04 -b sudo -b devtools -p user-setup.sh
 ```
+
+## Built-in Poststraps
+
+The `poststraps/` directory ships with user-level setup files. Reference them by name:
+
+```cmd
+container2wsl.bat ubuntu:22.04 -b zsh -p powerlevel10k
+```
+
+| Name | What it does |
+|------|--------------|
+| `powerlevel10k` | Installs Oh My Zsh if missing, installs Powerlevel10k and zsh plugins, and updates `~/.zshrc` |
+
+`powerlevel10k` expects `zsh` to already be installed. Pair it with the built-in `zsh` bootstrap when creating a fresh distro.
 
 ## Testing
 

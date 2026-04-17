@@ -242,7 +242,23 @@ set "_RC=%errorlevel%"
 call "%HELPERS%" assert_exit_zero "%_RC%" "homebrew: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "homebrew: bootstrap complete message"
 call "%HELPERS%" assert_output_contains "%OUT%" "build-essential" "homebrew: build-essential shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "/home/linuxbrew/.linuxbrew" "homebrew: linuxbrew prefix setup shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "chown -R" "homebrew: prefix ownership fix shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "Homebrew" "homebrew: Homebrew install command shown"
+
+:: ============================================================
+::  15. powerlevel10k built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m powerlevel10k built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-powerlevel10k --poststrap powerlevel10k > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "powerlevel10k: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "powerlevel10k: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "omz-install.sh" "powerlevel10k: oh-my-zsh install command shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "powerlevel10k" "powerlevel10k: theme install shown"
 
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
