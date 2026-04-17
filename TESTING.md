@@ -44,6 +44,7 @@ These tests use `--dry-run` mode, which parses arguments and prints the resolved
 | Nonexistent bare name warns | `-b bogus` shows WARNING in dry-run |
 | Mixed bare + explicit path | `-b sudo -b <tmpfile>` both resolve |
 | `bootstraps\name` from different CWD | Resolves via script dir when CWD differs |
+| Bare poststrap name resolves | `-p powerlevel10k` resolves to `poststraps\powerlevel10k`, commands listed |
 
 ### `test_02_docker.bat` — Docker Operations (MOCKED docker + wsl)
 
@@ -118,7 +119,8 @@ Poststrap runs commands as the created user (not root), unlike bootstrap.
 | Bootstrap + poststrap combo | `-b file -p file` | Both Bootstrap complete and Poststrap complete |
 | `-p` shorthand | `-p file` | Poststrap complete shown |
 | Poststrap in config banner | `--dry-run -p file` | "Poststrap:" label in banner |
-| Homebrew built-in bootstrap | `bootstraps\homebrew` path | Exit 0, build-essential and Homebrew shown |
+| powerlevel10k built-in poststrap | `-p powerlevel10k` | Exit 0, Oh My Zsh install command and theme setup shown |
+| Homebrew built-in bootstrap | `bootstraps\homebrew` path | Exit 0, build-essential, Linuxbrew prefix ownership fix, and Homebrew shown |
 
 ## Mock Details
 

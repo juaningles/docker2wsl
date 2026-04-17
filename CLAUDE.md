@@ -36,7 +36,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (169 assertions)
+tests\run_tests.bat                        # run all (178 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -59,10 +59,12 @@ tests\run_tests.bat --force                # skip collision pre-check
 container2wsl.bat            # main script (the only file users need)
 bootstraps/
   devtools                   # git, curl, build-essential, jq, etc.
-  homebrew                   # Linuxbrew + dependencies
+  homebrew                   # Linuxbrew + dependencies + prefix ownership setup
   sudo                       # install sudo + passwordless sudoers entry
   systemd-enable             # enable systemd in wsl.conf
   zsh                        # zsh + Oh My Zsh
+poststraps/
+  powerlevel10k             # installs Oh My Zsh if needed, theme, and plugins
 tests/
   run_tests.bat              # test runner with --html, --force, pre-flight checks
   helpers.bat                # assertion library (10 assertion types)

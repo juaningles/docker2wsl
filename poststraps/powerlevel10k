@@ -1,0 +1,53 @@
+# Installs Oh My Zsh on demand if it is not already present.
+OH_MY_ZSH_DIR="$HOME/.oh-my-zsh"
+ZSH_CUSTOM_DIR="${ZSH_CUSTOM:-$OH_MY_ZSH_DIR/custom}"
+ZSHRC_PATH="$HOME/.zshrc"
+OMZ_INSTALL_SH="${TMPDIR:-/tmp}/omz-install.sh"
+
+if ! command -v zsh >/dev/null 2>&1; then
+    echo "[ERROR] zsh is not installed. Run bootstrap 'zsh' first."
+    exit 1
+fi
+
+if [ ! -d "$OH_MY_ZSH_DIR" ]; then
+    curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh \
+        -o "$OMZ_INSTALL_SH"
+    sh "$OMZ_INSTALL_SH" --unattended
+    rm -f "$OMZ_INSTALL_SH"
+fi
+
+mkdir -p "$ZSH_CUSTOM_DIR/themes" "$ZSH_CUSTOM_DIR/plugins"
+
+if [ ! -d "$ZSH_CUSTOM_DIR/themes/powerlevel10k" ]; then
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \
+        "$ZSH_CUSTOM_DIR/themes/powerlevel10k"
+fi
+
+if [ ! -d "$ZSH_CUSTOM_DIR/plugins/zsh-autosuggestions" ]; then
+    git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions \
+        "$ZSH_CUSTOM_DIR/plugins/zsh-autosuggestions"
+fi
+
+if [ ! -d "$ZSH_CUSTOM_DIR/plugins/zsh-syntax-highlighting" ]; then
+    git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git \
+        "$ZSH_CUSTOM_DIR/plugins/zsh-syntax-highlighting"
+fi
+
+if [ -f "$ZSHRC_PATH" ]; then
+    sed -i 's/^ZSH_THEME="[^"]*"/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$ZSHRC_PATH"
+    sed -i 's/^plugins=.*/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/' "$ZSHRC_PATH"
+else
+    cat > "$ZSHRC_PATH" <<'EOF'
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
+source "$ZSH/oh-my-zsh.sh"
+EOF
+fi
+
+if ! grep -Fq '[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh' "$ZSHRC_PATH"; then
+    printf '\n[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh\n' >> "$ZSHRC_PATH"
+fi
+
+curl -fsSL https://raw.githubusercontent.com/juaningles/my_oh_my_zsh/refs/heads/main/.p10k.zsh \
+    -o "$HOME/.p10k.zsh"

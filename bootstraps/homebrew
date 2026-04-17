@@ -1,5 +1,11 @@
 # Install Homebrew (Linuxbrew) and its dependencies
 apt-get update
 apt-get install -y build-essential procps curl file git
-su - %C2W_USER% -c "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+mkdir -p /home/linuxbrew/.linuxbrew
+chown -R %C2W_USER%:%C2W_USER% /home/linuxbrew
+curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o /tmp/homebrew-install.sh
+su - %C2W_USER% -c "NONINTERACTIVE=1 /bin/bash /tmp/homebrew-install.sh"
+rm -f /tmp/homebrew-install.sh
+ln -s /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew
 su - %C2W_USER% -c "echo 'eval \"\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"' >> ~/.profile"
+echo 'PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"' >> /etc/environment
