@@ -19,7 +19,7 @@ The main script runs 4-6 sequential steps via `call :subroutine` labels:
 
 These are hard-won lessons. Do not "simplify" these workarounds:
 
-- **`wsl -d` rejects quoted names**: `wsl -d "name"` silently fails with "no distribution found". Always use `wsl -d name` (unquoted). `--import` and `--terminate` handle quotes fine.
+- **`wsl -d` and `-u` reject quoted values**: `wsl -d "name"` silently fails with "no distribution found"; `wsl -u "user"` fails with `getpwnam("user") failed`. Always use unquoted: `wsl -d name -u user`. `--import` and `--terminate` handle quotes fine.
 - **WSL exits 0 on failure**: Both `wsl --import` and `wsl -d ... -- cmd` return exit code 0 even when they fail. Must capture output to a file and check for UTF-16 LE error text via `findstr /c:"E r r o r"`.
 - **`bash -c` quoting is broken**: `wsl -d NAME -- bash -c "cmd 'arg'"` includes the trailing `"` in the argument. Use direct commands instead: `wsl -d NAME -u root -- useradd -m -s /bin/bash USERNAME`.
 - **Windows line endings corrupt wsl.conf**: CMD `echo` writes `\r\n`. After copying a file into WSL, run `sed -i "s/\r//" /etc/wsl.conf` or the `[user]` section won't parse.

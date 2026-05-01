@@ -817,7 +817,7 @@ powershell -noprofile -command ^
 set "_PS_SH_LX=%_PS_SH:\=/%"
 set "_PS_SH_LX=!_PS_SH_LX:C:/=/mnt/c/!"
 set "_PS_SH_LX=!_PS_SH_LX:c:/=/mnt/c/!"
-call %WSL_CMD% -d %~1 -u "%~6" -- bash "!_PS_SH_LX!" > "%_PS_TMP%" 2>&1
+call %WSL_CMD% -d %~1 -u %~6 -- bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
 set "_PS_RC=!errorlevel!"
 set "_PS_FAIL=0"
 if !_PS_RC! neq 0 set "_PS_FAIL=1"
