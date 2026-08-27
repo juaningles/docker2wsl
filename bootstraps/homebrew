@@ -6,6 +6,7 @@ chown -R %C2W_USER%:%C2W_USER% /home/linuxbrew
 curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o /tmp/homebrew-install.sh
 su - %C2W_USER% -c "NONINTERACTIVE=1 /bin/bash /tmp/homebrew-install.sh"
 rm -f /tmp/homebrew-install.sh
-ln -s /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew
+ln -sf /home/linuxbrew/.linuxbrew/bin/brew /usr/local/bin/brew
 su - %C2W_USER% -c "echo 'eval \"\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"' >> ~/.profile"
+su - %C2W_USER% -c "echo 'eval \"\$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"' >> ~%C2W_USER%/.profile"
 echo 'PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"' >> /etc/environment
