@@ -4,3 +4,5 @@ chsh -s /usr/bin/zsh %C2W_USER%
 curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh -o /tmp/omz-install.sh
 su - %C2W_USER% -c "sh /tmp/omz-install.sh --unattended"
 rm -f /tmp/omz-install.sh
+ln -s ~/.profile ~/.zprofile
+ln -sf ~%C2W_USER%/.profile ~%C2W_USER%/.zprofile
