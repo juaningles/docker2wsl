@@ -1,0 +1,1 @@
+container2wsl.bat juaningles/devnode:noble -n zdevnode -u juan -b sudo -b systemd-enable -b zsh -b homebrew -p powerlevel10k -p brew-python
