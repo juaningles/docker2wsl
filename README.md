@@ -127,6 +127,11 @@ container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
 | `zsh` | Installs zsh, curl, git and Oh My Zsh for the created user |
 | `devtools` | Installs git, curl, build-essential, jq, and other dev tools |
 | `homebrew` | Installs Homebrew (Linuxbrew), pre-creates the Linuxbrew prefix with the right ownership, and adds `brew shellenv` to `~/.profile` |
+| `k8s-tools` | Installs kubectl (latest stable), kubelogin, Helm 4 and yq into `/usr/local/bin` (amd64/arm64, apt or apk); skips any already on PATH |
+| `data-tools` | Installs jq, miller (`mlr`), make, unzip and curl (apt or apk) |
+| `azure-cli` | Installs the Azure CLI (`az`) from Microsoft's apt repository (Debian/Ubuntu only); skipped if present |
+
+The `k8s-tools`, `data-tools` and `azure-cli` files use no `%C2W_*%` variables, so they also work on a distro you already have: `sudo bash bootstraps/k8s-tools`.
 
 ## Poststrap Files
 
@@ -154,8 +159,29 @@ container2wsl.bat ubuntu:22.04 -b zsh -p powerlevel10k
 | Name | What it does |
 |------|--------------|
 | `powerlevel10k` | Installs Oh My Zsh if missing, installs Powerlevel10k and zsh plugins, and updates `~/.zshrc` |
+| `uv` | Installs [uv](https://docs.astral.sh/uv/) into `~/.local/bin` and a uv-managed CPython with `python`/`python3` shims. Set `C2W_UV_PYTHON=3.12` (on the Windows side) to pick a version |
+| `devtools-shell` | Clones [devtools](https://github.com/juaningles/devtools) to `~/devtools` and runs its `install.sh` (bash and zsh setup, aliases, `bin/` scripts). Source: `C2W_DEVTOOLS_REPO` if set, else `C:\code\devtools` if present, else GitHub |
+| `brew-python` | `brew install python` and a `python` symlink. Prefer `uv` |
 
-`powerlevel10k` expects `zsh` to already be installed. Pair it with the built-in `zsh` bootstrap when creating a fresh distro.
+`powerlevel10k` expects `zsh` to already be installed. Pair it with the built-in `zsh` bootstrap when creating a fresh distro. `uv` needs curl and `devtools-shell` needs git (`-b devtools` provides both).
+
+A full developer distro:
+
+```cmd
+container2wsl.bat ubuntu:24.04 -n dev -u alice ^
+  -b sudo -b systemd-enable -b devtools -b zsh -b k8s-tools -b data-tools -b azure-cli ^
+  -p powerlevel10k -p uv -p devtools-shell
+```
+
+Straps you keep elsewhere (for example in a private repo) are passed by path: `-p C:\code\my-overlay\straps\overlay`.
+
+### Writing strap files
+
+Each strap is joined into one bash script with `set -e`, so multi-line `if`/`case` blocks work. Three things to know:
+
+- Lines starting with `#` and blank lines are dropped before running, including inside heredocs.
+- `%NAME%` is replaced with the Windows environment variable when it is defined, and left as literal text when it is not. Test for the literal: `X=%MY_VAR%` then `case $X in *MY_VAR*) X= ;; esac`.
+- The command list is echoed through CMD first, which re-parses each line. Never put `>`, `<`, `|` or `&` inside double quotes, and avoid `%*`. A redirect outside quotes, or inside single quotes, is fine.
 
 ## Testing
 

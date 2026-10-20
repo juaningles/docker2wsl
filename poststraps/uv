@@ -1,0 +1,12 @@
+# Install uv (Astral) into ~/.local/bin and let it provide Python: installs the
+# latest CPython with python/python3 shims in ~/.local/bin. No system or brew Python needed.
+# Needs curl (bootstraps devtools or data-tools). Pin a version with C2W_UV_PYTHON=3.12.
+# Also runnable on an existing distro: bash poststraps/uv
+if ! command -v curl >/dev/null 2>&1; then echo "[ERROR] curl is not installed. Run bootstrap 'devtools' or 'data-tools' first."; exit 1; fi
+UV=$HOME/.local/bin/uv
+if [ ! -x $UV ]; then curl -LsSf https://astral.sh/uv/install.sh | sh; fi
+PYVER=%C2W_UV_PYTHON%
+case $PYVER in *C2W_UV_PYTHON*) PYVER= ;; esac
+$UV python install --default --preview-features python-install-default $PYVER
+$UV --version
+$HOME/.local/bin/python --version

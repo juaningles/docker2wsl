@@ -294,6 +294,75 @@ call "%HELPERS%" assert_exit_zero "%_RC%" "bare-cwd-exec: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "systemd=true" "bare-cwd-exec: systemd-enable commands shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "bare-cwd-exec: bootstrap complete message"
 
+:: ============================================================
+::  18. k8s-tools built-in bootstrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m k8s-tools built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-k8stools -b k8s-tools > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "k8s-tools: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "k8s-tools: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "dl.k8s.io/release/stable.txt" "k8s-tools: kubectl stable release lookup shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "kubelogin-linux-" "k8s-tools: kubelogin download shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "get-helm-4" "k8s-tools: helm 4 installer shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "mikefarah/yq" "k8s-tools: yq download shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "/usr/local/bin" "k8s-tools: installs into /usr/local/bin"
+
+:: ============================================================
+::  19. data-tools built-in bootstrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m data-tools built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-datatools -b data-tools > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "data-tools: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "data-tools: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "miller" "data-tools: miller in package list"
+call "%HELPERS%" assert_output_contains "%OUT%" "apk add" "data-tools: apk branch present"
+
+:: ============================================================
+::  20. azure-cli built-in bootstrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m azure-cli built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-azcli -b azure-cli > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "azure-cli: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "azure-cli: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "aka.ms/InstallAzureCLIDeb" "azure-cli: Microsoft installer shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "az version" "azure-cli: version check shown"
+
+:: ============================================================
+::  21. New straps are safe in CMD's command display
+::      (no stray redirect files in CWD, all commands listed)
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m new straps display safely in dry-run
+call :reset_mocks 2>nul
+
+set "_CWD=%C2W_TMPDIR%\straps_cwd"
+if exist "%_CWD%" rmdir /s /q "%_CWD%" >nul 2>&1
+mkdir "%_CWD%"
+pushd "%_CWD%"
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -p uv -p devtools-shell > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+popd
+set "_STRAY=0"
+for /f %%c in ('dir /b /a "%_CWD%" 2^>nul ^| find /c /v ""') do set "_STRAY=%%c"
+call "%HELPERS%" assert_exit_zero "%_RC%" "straps-dryrun: exit 0"
+call "%HELPERS%" assert_equal "%_STRAY%" "0" "straps-dryrun: no stray files created in CWD"
+call "%HELPERS%" assert_output_contains "%OUT%" "yq --version" "straps-dryrun: last k8s-tools command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "make --version" "straps-dryrun: last data-tools command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "python --version" "straps-dryrun: last uv command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "devtools/install.sh" "straps-dryrun: last devtools-shell command listed"
+rmdir /s /q "%_CWD%" >nul 2>&1
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 

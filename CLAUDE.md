@@ -32,11 +32,12 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 - **`goto :label 2>nul || (fallback)`** does not work reliably. Use explicit `if` chains.
 - **`>` in echo** is parsed as redirect. Don't use `>` as a display character in batch echo statements.
 - **Unicode characters** (`---`, checkmarks, bullets) don't survive CMD's codepage. Use ASCII only for display.
+- **Strap lines are re-parsed by CMD** in the command display loop (`call set "_BS_EXPANDED=!_BS_LINE!"`). The quoting flips, so `>`, `<`, `|`, `&` inside a strap's double quotes become live CMD operators and can create stray files. `%*` expands to the subroutine's args. Keep those characters outside double quotes. test_04 #21 checks the built-ins for stray files.
 
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (178 assertions)
+tests\run_tests.bat                        # run all (213 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -63,8 +64,14 @@ bootstraps/
   sudo                       # install sudo + passwordless sudoers entry
   systemd-enable             # enable systemd in wsl.conf
   zsh                        # zsh + Oh My Zsh
+  k8s-tools                  # kubectl, kubelogin, helm 4, yq -> /usr/local/bin (apt/apk)
+  data-tools                 # jq, miller, make, unzip, curl (apt/apk)
+  azure-cli                  # az via Microsoft's apt repo
 poststraps/
   powerlevel10k             # installs Oh My Zsh if needed, theme, and plugins
+  brew-python               # brew python (superseded by uv)
+  uv                        # uv + uv-managed default python (C2W_UV_PYTHON pins)
+  devtools-shell            # clone devtools to ~/devtools + install.sh (C2W_DEVTOOLS_REPO)
 tests/
   run_tests.bat              # test runner with --html, --force, pre-flight checks
   helpers.bat                # assertion library (10 assertion types)

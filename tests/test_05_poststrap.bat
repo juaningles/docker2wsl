@@ -260,6 +260,64 @@ call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "powerlevel
 call "%HELPERS%" assert_output_contains "%OUT%" "omz-install.sh" "powerlevel10k: oh-my-zsh install command shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "powerlevel10k" "powerlevel10k: theme install shown"
 
+:: ============================================================
+::  16. uv built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m uv built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_UV_PYTHON="
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-uv -p uv > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "uv: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "uv: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "astral.sh/uv/install.sh" "uv: astral installer shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "python install --default" "uv: uv-managed default python shown"
+
+:: ============================================================
+::  17. uv poststrap honours C2W_UV_PYTHON
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m uv poststrap honours C2W_UV_PYTHON
+call :reset_mocks 2>nul
+set "C2W_UV_PYTHON=3.12"
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-uvpin --dry-run -p uv > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_UV_PYTHON="
+call "%HELPERS%" assert_exit_zero "%_RC%" "uv-pin: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "PYVER=3.12" "uv-pin: C2W_UV_PYTHON expanded"
+
+:: ============================================================
+::  18. devtools-shell built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m devtools-shell built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_DEVTOOLS_REPO="
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-dtshell -p devtools-shell > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "devtools-shell: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "devtools-shell: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "/mnt/c/code/devtools" "devtools-shell: Windows clone fallback shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "github.com/juaningles/devtools.git" "devtools-shell: public repo fallback shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "devtools/install.sh" "devtools-shell: install.sh run shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "safe.directory" "devtools-shell: trusts /mnt/c source repo"
+
+:: ============================================================
+::  19. devtools-shell honours C2W_DEVTOOLS_REPO
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m devtools-shell honours C2W_DEVTOOLS_REPO
+call :reset_mocks 2>nul
+set "C2W_DEVTOOLS_REPO=https://example.invalid/my/devtools.git"
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-dtrepo --dry-run -p devtools-shell > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_DEVTOOLS_REPO="
+call "%HELPERS%" assert_exit_zero "%_RC%" "devtools-repo: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "REPO=https://example.invalid/my/devtools.git" "devtools-repo: C2W_DEVTOOLS_REPO expanded"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 

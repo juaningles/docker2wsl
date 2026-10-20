@@ -1,0 +1,7 @@
+# Install the Azure CLI (az) from Microsoft's apt repository. Debian/Ubuntu only.
+# Skipped if az is already installed. kubelogin -l azurecli and ACR logins need it.
+# Also runnable on an existing distro: sudo bash bootstraps/azure-cli
+if ! command -v apt-get >/dev/null 2>&1; then echo "[ERROR] azure-cli needs apt - Debian or Ubuntu image."; exit 1; fi
+if ! command -v curl >/dev/null 2>&1; then apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates; fi
+if ! command -v az >/dev/null 2>&1; then curl -fsSL https://aka.ms/InstallAzureCLIDeb -o /tmp/install-azure-cli.sh; DEBIAN_FRONTEND=noninteractive bash /tmp/install-azure-cli.sh; rm -f /tmp/install-azure-cli.sh; fi
+az version --output table
