@@ -185,6 +185,34 @@ Each strap is joined into one bash script with `set -e`, so multi-line `if`/`cas
 - `%NAME%` is replaced with the Windows environment variable when it is defined, and left as literal text when it is not. Test for the literal: `X=%MY_VAR%` then `case $X in *MY_VAR*) X= ;; esac`.
 - The command list is echoed through CMD first, which re-parses each line. Never put `>`, `<`, `|` or `&` inside double quotes, and avoid `%*`. A redirect outside quotes, or inside single quotes, is fine.
 
+## Build manifest
+
+Every build records what went into the distro, so you can tell later exactly which image and which strap versions produced it, and rebuild it the same way:
+
+| Where | What |
+|---|---|
+| `/etc/container2wsl/manifest.jsonl` | the manifest, inside the distro (readable by everyone) |
+| `<location>\<name>\container2wsl-manifest.jsonl` | the same file on Windows, next to `ext4.vhdx`; readable without starting the distro |
+| `/etc/container2wsl/straps/NN-<kind>-<name>.sh` | the exact script each strap ran, after `%VAR%` expansion (root only, mode 600, because expanded variables can hold secrets) |
+
+It is [JSON Lines](https://jsonlines.org/): one record per line, appended as the build goes:
+
+| `event` | Recorded | Contents |
+|---|---|---|
+| `create` | once the distro exists | the command line as typed and its working folder; the image as requested, its image ID (`sha256:...`), registry digests (`repo@sha256:...`), tags, OS/arch, build date, size and whether this run pulled it; distro name, user, install path and `/etc/os-release` name; requested straps (as typed and resolved); container2wsl version and git commit; Windows host, build, WSL version and container engine |
+| `strap` | after each bootstrap/poststrap, pass or fail | kind, order, name as requested, resolved path, sha256 and git commit (with a dirty flag) of the strap file, sha256 of the rendered script and where it was saved, user it ran as, command count, duration, `ok`/`failed` |
+| `complete` | at the end | `ok` or `failed`, the failed step (for example `poststrap 2: uv`), total duration |
+
+```bash
+cat /etc/container2wsl/manifest.jsonl | jq .                       # everything
+jq -r 'select(.event=="create") | .image.digests[]' /etc/container2wsl/manifest.jsonl
+jq -r 'select(.event=="strap") | "\(.kind) \(.requested) \(.result) \(.duration_s)s"' /etc/container2wsl/manifest.jsonl
+```
+
+A `--force` rebuild keeps the previous Windows copy as `container2wsl-manifest.prev.jsonl`. `--dry-run` writes nothing. Straps you run by hand later (`sudo bash bootstraps/k8s-tools`) are not recorded.
+
+The manifest needs `lib\manifest.ps1` next to `container2wsl.bat`. Without it the script still works on its own; the banner says `Manifest : off` and nothing is recorded. Writing the manifest never fails a build: a problem only prints a `[WARN]`.
+
 ## Testing
 
 The test suite uses mock `docker` and `wsl` commands so it can run without Docker or real WSL imports.

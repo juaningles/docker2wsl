@@ -8,6 +8,7 @@
 ::    C2W_MOCK_CREATE_FAIL    1 = docker create returns error (default: 0)
 ::    C2W_MOCK_EXPORT_FAIL    1 = docker export returns error (default: 0)
 ::    C2W_MOCK_CONTAINER_ID   ID echoed on create (default: mock-container-abc123)
+::    C2W_MOCK_INSPECT_FILE   file whose content `image inspect` prints (optional JSON)
 ::    C2W_MOCK_LOG            path to log file (optional)
 :: ============================================================
 setlocal enabledelayedexpansion
@@ -32,8 +33,9 @@ exit /b 0
 
 :do_image
 :: docker image inspect <name>  → 0 if exists, 1 if not
-if %C2W_MOCK_IMAGE_EXISTS% equ 1 exit /b 0
-exit /b 1
+if %C2W_MOCK_IMAGE_EXISTS% neq 1 exit /b 1
+if defined C2W_MOCK_INSPECT_FILE if exist "%C2W_MOCK_INSPECT_FILE%" type "%C2W_MOCK_INSPECT_FILE%"
+exit /b 0
 
 :do_pull
 :: docker pull <image>

@@ -1,4 +1,11 @@
 @echo off
+:: Capture the command line for the manifest before delayed expansion can eat "!".
+setlocal
+set "C2W_ARGV=%*"
+set "C2W_CWD=%CD%"
+:: Script folder, captured before argument parsing: plain `shift` also shifts %0,
+:: so %~dp0 is wrong in the main flow afterwards (subroutines are fine).
+set "C2W_SCRIPT_DIR=%~dp0"
 setlocal enabledelayedexpansion
 
 :: ============================================================
@@ -196,6 +203,7 @@ if "%~2"=="--force" goto :arg_bootstrap_invalid
 if "%~2"=="-f" goto :arg_bootstrap_invalid
 set /a ARG_BOOTSTRAP_N+=1
 set "ARG_BOOTSTRAP_!ARG_BOOTSTRAP_N!=%~2"
+set "ARG_BOOTSTRAP_REQ_!ARG_BOOTSTRAP_N!=%~2"
 shift
 shift
 goto :parse_args
@@ -228,6 +236,7 @@ if "%~2"=="--force" goto :arg_poststrap_invalid
 if "%~2"=="-f" goto :arg_poststrap_invalid
 set /a ARG_POSTSTRAP_N+=1
 set "ARG_POSTSTRAP_!ARG_POSTSTRAP_N!=%~2"
+set "ARG_POSTSTRAP_REQ_!ARG_POSTSTRAP_N!=%~2"
 shift
 shift
 goto :parse_args
@@ -349,6 +358,8 @@ echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
 if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do echo  Bootstrap: !ARG_BOOTSTRAP_%%i!
 if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do echo  Poststrap: !ARG_POSTSTRAP_%%i!
 if %FORCE%==1 echo  Force    : yes (overwrite existing distro)
+if exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" echo  Manifest : /etc/container2wsl/manifest.jsonl, copy in !ARG_WSL_LOCATION!\!ARG_WSL_NAME!
+if not exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" echo  Manifest : off - lib\manifest.ps1 not found next to the script
 if %DRY_RUN%==1 echo  Mode     : DRY RUN (no changes will be made)
 echo  ----------------------------------------
 echo.
@@ -399,6 +410,16 @@ echo.
 exit /b 0
 
 :after_dryrun
+
+:: --- Manifest bookkeeping (lib\manifest.ps1; skipped when the helper is absent) ---
+set "C2W_MANIFEST=0"
+if exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" set "C2W_MANIFEST=1"
+set "C2W_M_TMP=%TEMP%\c2w_manifest.jsonl"
+set "C2W_BUILD_START=%TEMP%\c2w_build_start.txt"
+set "C2W_STRAP_START=%TEMP%\c2w_strap_start.txt"
+set "C2W_STRAP_SEQ=0"
+set "C2W_IMAGE_PULLED=0"
+if "%C2W_MANIFEST%"=="1" powershell -noprofile -command "[DateTime]::UtcNow.ToString('o')" > "%C2W_BUILD_START%" 2>nul
 
 :: --- Determine step count ---
 set "STEP_COUNT=4"
@@ -461,6 +482,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: --- Manifest: source image, command line, requested straps, host ---
+call :manifest create
+
 :: --- Step 6 (optional): Run bootstrap commands ---
 :: Set built-in variables for bootstrap file expansion.
 :: Bootstrap commands can reference these as %C2W_NAME%, %C2W_USER%, etc.
@@ -476,9 +500,12 @@ if %ARG_BOOTSTRAP_N% geq 1 (
     set "_BS_IDX=0"
     for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do (
         set /a _BS_IDX+=1
+        set "C2W_M_REQ=!ARG_BOOTSTRAP_REQ_%%i!"
         call :wsl_bootstrap "%ARG_WSL_NAME%" "!ARG_BOOTSTRAP_%%i!" !_BS_IDX! %ARG_BOOTSTRAP_N% !BOOTSTRAP_STEP!
         if errorlevel 1 (
             echo [ERROR] Bootstrap failed.
+            set "C2W_M_FAILED=bootstrap !_BS_IDX!: !ARG_BOOTSTRAP_REQ_%%i!"
+            call :manifest_complete failed
             exit /b 1
         )
     )
@@ -491,9 +518,12 @@ if %ARG_POSTSTRAP_N% geq 1 (
     set "_PS_IDX=0"
     for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do (
         set /a _PS_IDX+=1
+        set "C2W_M_REQ=!ARG_POSTSTRAP_REQ_%%i!"
         call :wsl_poststrap "%ARG_WSL_NAME%" "!ARG_POSTSTRAP_%%i!" !_PS_IDX! %ARG_POSTSTRAP_N% !POSTSTRAP_STEP! "%ARG_WSL_USER%"
         if errorlevel 1 (
             echo [ERROR] Poststrap failed.
+            set "C2W_M_FAILED=poststrap !_PS_IDX!: !ARG_POSTSTRAP_REQ_%%i!"
+            call :manifest_complete failed
             exit /b 1
         )
     )
@@ -501,6 +531,9 @@ if %ARG_POSTSTRAP_N% geq 1 (
 
 :: --- Cleanup temp tar ---
 if exist "%EXPORT_TAR%" del /f /q "%EXPORT_TAR%" >nul 2>&1
+
+set "C2W_M_FAILED="
+call :manifest_complete ok
 
 :: Stop the distro so the next interactive launch starts fresh and applies
 :: /etc/wsl.conf default-user settings deterministically.
@@ -510,6 +543,7 @@ echo.
 echo [SUCCESS] WSL distribution created.
 echo           Name   : %ARG_WSL_NAME%
 echo           Start  : wsl -d %ARG_WSL_NAME%
+if "%C2W_MANIFEST%"=="1" echo           Record : cat /etc/container2wsl/manifest.jsonl  (copy: %INSTALL_PATH%\container2wsl-manifest.jsonl)
 echo.
 exit /b 0
 
@@ -533,6 +567,7 @@ if errorlevel 1 (
     echo [ERROR] docker pull failed for: %~1
     exit /b 1
 )
+set "C2W_IMAGE_PULLED=1"
 echo       Pull complete.
 exit /b 0
 
@@ -751,6 +786,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
 :: This avoids CMD mangling shell operators (>>, |, &, etc.).
 set "_BS_SH=%TEMP%\c2w_bootstrap_cmd.sh"
 powershell -noprofile -command ^
+  "[IO.File]::WriteAllText('%C2W_STRAP_START%', [DateTime]::UtcNow.ToString('o')); " ^
   "$lines = @('set -e'); " ^
   "Get-Content -LiteralPath '%~2' -Encoding UTF8 | ForEach-Object { " ^
   "  $l = $_.TrimEnd(); " ^
@@ -769,6 +805,9 @@ if !_BS_RC! neq 0 set "_BS_FAIL=1"
 findstr /c:"E r r o r" "%_BS_TMP%" >nul 2>&1
 if not errorlevel 1 set "_BS_FAIL=1"
 type "%_BS_TMP%"
+set "_M_RESULT=ok"
+if "!_BS_FAIL!"=="1" set "_M_RESULT=failed"
+call :manifest_strap "%~1" bootstrap %~3 "%~2" "%_BS_SH%" "!_BS_SH_LX!" !_BS_COUNT! root !_M_RESULT!
 del /f /q "%_BS_TMP%" "%_BS_SH%" >nul 2>&1
 if "!_BS_FAIL!"=="1" (
     echo [ERROR] Bootstrap command failed.
@@ -806,6 +845,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
 :: with Unix line endings. Same as bootstrap but runs as user, not root.
 set "_PS_SH=%TEMP%\c2w_poststrap_cmd.sh"
 powershell -noprofile -command ^
+  "[IO.File]::WriteAllText('%C2W_STRAP_START%', [DateTime]::UtcNow.ToString('o')); " ^
   "$lines = @('set -e'); " ^
   "Get-Content -LiteralPath '%~2' -Encoding UTF8 | ForEach-Object { " ^
   "  $l = $_.TrimEnd(); " ^
@@ -824,10 +864,69 @@ if !_PS_RC! neq 0 set "_PS_FAIL=1"
 findstr /c:"E r r o r" "%_PS_TMP%" >nul 2>&1
 if not errorlevel 1 set "_PS_FAIL=1"
 type "%_PS_TMP%"
+set "_M_RESULT=ok"
+if "!_PS_FAIL!"=="1" set "_M_RESULT=failed"
+call :manifest_strap "%~1" poststrap %~3 "%~2" "%_PS_SH%" "!_PS_SH_LX!" !_PS_COUNT! %~6 !_M_RESULT!
 del /f /q "%_PS_TMP%" "%_PS_SH%" >nul 2>&1
 if "!_PS_FAIL!"=="1" (
     echo [ERROR] Poststrap command failed.
     exit /b 1
 )
 echo       Poststrap complete ^(!_PS_COUNT! commands executed^).
+exit /b 0
+
+
+:: ============================================================
+::  MANIFEST (optional; needs lib\manifest.ps1 next to this script)
+::  Windows copy : <location>\<name>\container2wsl-manifest.jsonl
+::  In the distro: /etc/container2wsl/manifest.jsonl (JSON Lines)
+::                 /etc/container2wsl/straps/NN-kind-name.sh (rendered scripts, root 0600)
+::  Never fails the build: errors only print a warning.
+:: ============================================================
+
+:manifest
+:: %~1 = create, strap or complete. Inputs travel in environment variables
+:: (listed in lib\manifest.ps1), so CMD never re-parses user-supplied text.
+if not "%C2W_MANIFEST%"=="1" exit /b 0
+set "C2W_M_ACTION=%~1"
+powershell -noprofile -executionpolicy bypass -file "%C2W_SCRIPT_DIR%lib\manifest.ps1" >nul 2>&1
+if errorlevel 1 (
+    echo       [WARN] Manifest: could not record '%~1'. The build itself is unaffected.
+    exit /b 0
+)
+set "_M_LX=%C2W_M_TMP:\=/%"
+set "_M_LX=!_M_LX:C:/=/mnt/c/!"
+set "_M_LX=!_M_LX:c:/=/mnt/c/!"
+call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 644 "!_M_LX!" /etc/container2wsl/manifest.jsonl >nul 2>&1
+exit /b 0
+
+
+:manifest_strap
+:: Record one strap run and keep the exact script that ran inside the distro.
+:: %~1 = distro  %~2 = bootstrap/poststrap  %~3 = index  %~4 = strap file
+:: %~5 = rendered .sh (Windows)  %~6 = rendered .sh (Linux path)  %~7 = commands
+:: %~8 = ran as  %~9 = ok/failed
+if not "%C2W_MANIFEST%"=="1" exit /b 0
+set /a C2W_STRAP_SEQ+=1
+set "_MS_SEQ=0!C2W_STRAP_SEQ!"
+set "_MS_SEQ=!_MS_SEQ:~-2!"
+set "C2W_M_KIND=%~2"
+set "C2W_M_INDEX=%~3"
+set "C2W_M_SEQ=!C2W_STRAP_SEQ!"
+set "C2W_M_PATH=%~4"
+set "C2W_M_SH=%~5"
+set "C2W_M_COUNT=%~7"
+set "C2W_M_AS=%~8"
+set "C2W_M_RESULT=%~9"
+set "C2W_M_COPY=/etc/container2wsl/straps/!_MS_SEQ!-%~2-%~nx4.sh"
+call %WSL_CMD% -d %~1 -u root -- install -D -m 600 "%~6" "!C2W_M_COPY!" >nul 2>&1
+call :manifest strap
+exit /b 0
+
+
+:manifest_complete
+:: %~1 = ok or failed (C2W_M_FAILED names the failed step)
+set "C2W_M_RESULT=%~1"
+call :manifest complete
+del /f /q "%C2W_BUILD_START%" "%C2W_STRAP_START%" "%C2W_M_TMP%" >nul 2>&1
 exit /b 0
