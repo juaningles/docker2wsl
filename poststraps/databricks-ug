@@ -1,0 +1,20 @@
+# Install Databricks Unity Gateway (ug, formerly ucode): one launcher that runs Claude Code,
+# Codex, Gemini CLI, OpenCode, Copilot CLI and Pi through a Databricks workspace's AI Gateway.
+# Also installs the Databricks CLI that ug uses to sign in. Replaces an older ucode install.
+# Needs uv (poststrap uv) and, for the Databricks CLI in /usr/local/bin, passwordless sudo
+# (bootstrap sudo). Agent CLIs: add -p claude, or ug installs them with npm when present.
+# After the build, once inside the distro: ug configure   (or straight to: ug claude)
+# Also runnable on an existing distro: bash poststraps/databricks-ug
+UV=$HOME/.local/bin/uv
+if [ ! -x $UV ]; then echo "[ERROR] uv is not installed. Run poststrap 'uv' first."; exit 1; fi
+if ! command -v databricks >/dev/null 2>&1; then
+    if ! sudo -n true 2>/dev/null; then echo "[ERROR] the Databricks CLI installs to /usr/local/bin and needs passwordless sudo. Run bootstrap 'sudo' first."; exit 1; fi
+    curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh -o /tmp/databricks-setup-cli.sh
+    sudo -n sh /tmp/databricks-setup-cli.sh
+    rm -f /tmp/databricks-setup-cli.sh
+fi
+if $UV tool list 2>/dev/null | grep -q '^ucode '; then $UV tool uninstall ucode; fi
+if $UV tool list 2>/dev/null | grep -q '^unity-gateway '; then $UV tool upgrade unity-gateway; else $UV tool install git+https://github.com/databricks/unity-gateway; fi
+$HOME/.local/bin/ug --help >/dev/null
+$HOME/.local/bin/ug --version
+databricks --version

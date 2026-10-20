@@ -162,6 +162,8 @@ container2wsl.bat ubuntu:22.04 -b zsh -p powerlevel10k
 | `uv` | Installs [uv](https://docs.astral.sh/uv/) into `~/.local/bin` and a uv-managed CPython with `python`/`python3` shims. Set `C2W_UV_PYTHON=3.12` (on the Windows side) to pick a version |
 | `devtools-shell` | Clones [devtools](https://github.com/juaningles/devtools) to `~/devtools` and runs its `install.sh` (bash and zsh setup, aliases, `bin/` scripts). Source: `C2W_DEVTOOLS_REPO` if set, else `C:\code\devtools` if present, else GitHub |
 | `brew-python` | `brew install python` and a `python` symlink. Prefer `uv` |
+| `claude` | Installs [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with the native installer (no npm) into `~/.local/bin`. `C2W_CLAUDE_VERSION=stable`, `latest` or a version picks the release |
+| `databricks-ug` | Installs [Databricks Unity Gateway](https://github.com/databricks/unity-gateway) (`ug`, formerly `ucode`) with uv, plus the Databricks CLI it signs in with; replaces an old `ucode` install. Needs `-p uv` and `-b sudo`. Then run `ug configure` (or `ug claude`) once in the distro |
 
 `powerlevel10k` expects `zsh` to already be installed. Pair it with the built-in `zsh` bootstrap when creating a fresh distro. `uv` needs curl and `devtools-shell` needs git (`-b devtools` provides both).
 

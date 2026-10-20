@@ -37,7 +37,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (213 assertions)
+tests\run_tests.bat                        # run all (227 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -72,6 +72,8 @@ poststraps/
   brew-python               # brew python (superseded by uv)
   uv                        # uv + uv-managed default python (C2W_UV_PYTHON pins)
   devtools-shell            # clone devtools to ~/devtools + install.sh (C2W_DEVTOOLS_REPO)
+  claude                    # Claude Code, native installer (C2W_CLAUDE_VERSION)
+  databricks-ug             # Databricks Unity Gateway (ug, formerly ucode) + Databricks CLI
 tests/
   run_tests.bat              # test runner with --html, --force, pre-flight checks
   helpers.bat                # assertion library (10 assertion types)

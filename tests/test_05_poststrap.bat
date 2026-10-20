@@ -318,6 +318,50 @@ set "C2W_DEVTOOLS_REPO="
 call "%HELPERS%" assert_exit_zero "%_RC%" "devtools-repo: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "REPO=https://example.invalid/my/devtools.git" "devtools-repo: C2W_DEVTOOLS_REPO expanded"
 
+:: ============================================================
+::  20. claude built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m claude built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_CLAUDE_VERSION="
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-claude -p claude > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "claude: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "claude: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "claude.ai/install.sh" "claude: native installer shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "claude --version" "claude: version check shown"
+
+:: ============================================================
+::  21. claude poststrap honours C2W_CLAUDE_VERSION
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m claude poststrap honours C2W_CLAUDE_VERSION
+call :reset_mocks 2>nul
+set "C2W_CLAUDE_VERSION=stable"
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-claudever --dry-run -p claude > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_CLAUDE_VERSION="
+call "%HELPERS%" assert_exit_zero "%_RC%" "claude-version: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "CVER=stable" "claude-version: C2W_CLAUDE_VERSION expanded"
+
+:: ============================================================
+::  22. databricks-ug built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m databricks-ug built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-dbug -p databricks-ug > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "databricks-ug: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "databricks-ug: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "databricks/setup-cli" "databricks-ug: Databricks CLI installer shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "tool uninstall ucode" "databricks-ug: old ucode migration shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "git+https://github.com/databricks/unity-gateway" "databricks-ug: unity-gateway install shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "ug --version" "databricks-ug: version check shown"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 

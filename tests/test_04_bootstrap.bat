@@ -350,7 +350,7 @@ set "_CWD=%C2W_TMPDIR%\straps_cwd"
 if exist "%_CWD%" rmdir /s /q "%_CWD%" >nul 2>&1
 mkdir "%_CWD%"
 pushd "%_CWD%"
-call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -p uv -p devtools-shell > "%OUT%" 2>&1
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -p uv -p devtools-shell -p claude -p databricks-ug > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 popd
 set "_STRAY=0"
@@ -361,6 +361,8 @@ call "%HELPERS%" assert_output_contains "%OUT%" "yq --version" "straps-dryrun: l
 call "%HELPERS%" assert_output_contains "%OUT%" "make --version" "straps-dryrun: last data-tools command listed"
 call "%HELPERS%" assert_output_contains "%OUT%" "python --version" "straps-dryrun: last uv command listed"
 call "%HELPERS%" assert_output_contains "%OUT%" "devtools/install.sh" "straps-dryrun: last devtools-shell command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "claude --version" "straps-dryrun: last claude command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "databricks --version" "straps-dryrun: last databricks-ug command listed"
 rmdir /s /q "%_CWD%" >nul 2>&1
 
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
