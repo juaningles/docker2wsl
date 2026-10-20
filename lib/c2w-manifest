@@ -116,6 +116,7 @@ function dflt(a, b) { return a != "" ? a : b }
     hcomp = v("host.computer"); huser = v("host.windows_user"); hwin = v("host.windows")
     hwsl = v("host.wsl"); heng = v("host.engine")
     nb = cnt("straps.bootstrap"); np = cnt("straps.poststrap")
+    npv = cnt("private"); for (i = 0; i < npv; i++) { pv[i] = v("private[" i "].path"); pvg[i] = v("private[" i "].git.commit") (v("private[" i "].git.dirty") == "true" ? "*" : "") }
     for (i = 0; i < nb; i++) reqb[i] = base(v("straps.bootstrap[" i "].requested"))
     for (i = 0; i < np; i++) reqp[i] = base(v("straps.poststrap[" i "].requested"))
   } else if (ev == "strap") {
@@ -153,6 +154,7 @@ END {
   if (iid != "") printf "  id      %s\n", iid
   for (i = 0; i < nd; i++) printf "  digest  %s\n", dig[i]
   if (ios != "" || icreated != "") printf "  info    %s/%s  created %s  %s\n", dflt(ios, "?"), dflt(iarch, "?"), when(icreated), human(isize)
+  for (i = 0; i < npv; i++) printf "%-9s %s%s\n", (i == 0 ? "Private" : ""), pv[i], (pvg[i] != "" ? "  (git " pvg[i] ")" : "")
   printf "Tool      container2wsl %s%s\n", tver, (tgit != "" ? "  (git " tgit (tdirty == "true" ? ", uncommitted changes" : "") ")" : "")
   printf "Host      %s (%s)  Windows %s%s%s\n", hcomp, huser, hwin, (hwsl != "" ? "  " hwsl : ""), (heng != "" ? "  " heng : "")
   if (ns == 0 && nb + np == 0) { print "Straps    none"; exit 0 }

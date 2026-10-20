@@ -95,6 +95,7 @@ switch ($action) {
         os = $osrel; replaced_existing = ((Ev 'FORCE') -eq '1')
       }
       straps  = [ordered]@{ bootstrap = (StrapList 'BOOTSTRAP'); poststrap = (StrapList 'POSTSTRAP') }
+      private = @(foreach ($d in @((Ev 'C2W_PRIVATE_DIRS') -split ';' | Where-Object { $_ })) { [ordered]@{ path = $d; git = (GitInfo $d) } })
       tool    = [ordered]@{ name = 'container2wsl'; version = (Ev 'VERSION'); path = (Ev 'C2W_SCRIPT_DIR'); git = (GitInfo (Ev 'C2W_SCRIPT_DIR')) }
       host    = [ordered]@{
         computer = $env:COMPUTERNAME; windows_user = $env:USERNAME

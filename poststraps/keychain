@@ -1,0 +1,35 @@
+# Install keychain (ssh-agent manager; upstream github.com/danielrobbins/keychain, formerly
+# funtoo/keychain) and make every login reuse one agent: the distro package (apt/apk, 2.8.5)
+# when passwordless sudo is available (bootstrap sudo), else the prebuilt script from the
+# upstream 2.8.5 tag into ~/.local/bin (C2W_KEYCHAIN_FALLBACK pins another tag that ships one).
+# Run after poststrap ssh-keys: keys to load come from ~/.keychain_default_keys (written by
+# ssh-keys, else filled here from whatever ~/.ssh holds at that moment). devtools' env.sh already runs keychain at shell start; without devtools the
+# eval line is appended to ~/.profile once. Also runnable on an existing distro: bash poststraps/keychain
+is_key() { case "$1" in *.pub|config|known_hosts*|authorized_keys|README*|*.md|environment|rc) return 1 ;; *) return 0 ;; esac; }
+# full paths: a non-root PATH and sudo's secure_path on Alpine both lack /sbin, where apk lives
+APT=$(command -v apt-get || true); APK=$(command -v apk || ls /sbin/apk 2>/dev/null || true)
+if ! command -v keychain >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    if [ -n "$APT" ]; then sudo -n "$APT" update -qq; sudo -n env DEBIAN_FRONTEND=noninteractive "$APT" install -y -qq keychain openssh-client >/dev/null; fi
+    if [ -n "$APK" ]; then sudo -n "$APK" add --no-cache keychain openssh-client >/dev/null; fi
+fi
+if ! command -v keychain >/dev/null 2>&1 && [ ! -x $HOME/.local/bin/keychain ]; then
+    TAG="%C2W_KEYCHAIN_FALLBACK%"
+    case "$TAG" in *C2W_KEYCHAIN_FALLBACK*) TAG=2.8.5 ;; esac
+    echo "keychain: no package available, installing the upstream $TAG script into ~/.local/bin"
+    mkdir -p $HOME/.local/bin
+    URL="https://github.com/danielrobbins/keychain/archive/refs/tags/$TAG.tar.gz"
+    if command -v curl >/dev/null 2>&1; then curl -fsSL "$URL"; else wget -qO- "$URL"; fi | tar -xzOf - "keychain-$TAG/keychain" > $HOME/.local/bin/keychain
+    [ -s $HOME/.local/bin/keychain ] || { echo "[ERROR] keychain: download of $URL failed (need curl or wget and network)"; rm -f $HOME/.local/bin/keychain; exit 1; }
+    chmod 755 $HOME/.local/bin/keychain
+fi
+KC=$(command -v keychain || echo $HOME/.local/bin/keychain)
+if [ ! -s $HOME/.keychain_default_keys ]; then
+    : > $HOME/.keychain_default_keys
+    for F in $HOME/.ssh/*; do B=$(basename "$F"); if [ -f "$F" ] && is_key "$B"; then echo "$B" >> $HOME/.keychain_default_keys; fi; done
+fi
+if [ ! -d $HOME/devtools ] && ! grep -qs 'keychain --eval' $HOME/.profile; then
+    printf '\n# ssh-agent via keychain (container2wsl poststrap keychain); ~/.local/bin may not be on PATH yet\nKC=$(command -v keychain || echo "$HOME/.local/bin/keychain")\n[ -x "$KC" ] && eval "$("$KC" --eval --agents ssh --quiet $(cat ~/.keychain_default_keys 2>/dev/null))"\n' >> $HOME/.profile
+    echo "keychain: eval line added to ~/.profile (no devtools here)"
+fi
+echo "keychain: keys: $(tr '\n' ' ' < $HOME/.keychain_default_keys)"
+$KC --version 2>&1 | head -1

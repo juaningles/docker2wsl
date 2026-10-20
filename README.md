@@ -41,10 +41,13 @@ Options:
   --location, -l <path>   WSL storage dir (default: C:\wsl-storage)
   --bootstrap, -b <file>  Run commands from file as root after setup (repeatable)
   --poststrap, -p <file>  Run commands from file as user after setup (repeatable)
+  --private <dir>         Private overlay folder (repeatable; see Private overlays)
   --force,    -f          Overwrite existing WSL distro with same name
   --dry-run               Parse and print config, do not execute
   --help,     -h          Show help
 ```
+
+The default storage root is `%SystemDrive%\wsl-storage`; set `C2W_LOCATION` to change it for every build.
 
 ## Examples
 
@@ -103,6 +106,12 @@ Bootstrap files support `%VAR%` expansion. The following built-in variables are 
 | `%C2W_USER%` | Default Linux user |
 | `%C2W_IMAGE%` | Docker image name |
 | `%C2W_LOCATION%` | WSL storage root path |
+| `%C2W_SCRIPT_DIR%` / `%C2W_SCRIPT_DIR_LX%` | container2wsl's own folder, as a Windows path (trailing `\`) and as `/mnt/<drive>/...` |
+| `%C2W_STRAP_DIR%` / `%C2W_STRAP_DIR_LX%` | the folder of the strap being run, so a strap in a private repo reaches its repo with `..` |
+| `%C2W_USERPROFILE_LX%` | your Windows profile as `/mnt/<drive>/Users/<name>` |
+| `%C2W_PRIVATE_DIRS%` / `%C2W_PRIVATE_DIRS_LX%` | the private overlay folders, `;` separated Windows paths and `:` separated `/mnt` paths |
+
+Nothing in container2wsl assumes `C:` or a fixed folder: clone it anywhere, on any drive, and use these variables instead of absolute paths in your own straps.
 
 Example bootstrap file:
 
@@ -125,7 +134,7 @@ container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
 | `sudo` | Installs sudo, grants passwordless sudo to the created user |
 | `systemd-enable` | Enables systemd in `/etc/wsl.conf` |
 | `zsh` | Installs zsh, curl, git and Oh My Zsh for the created user |
-| `devtools` | Installs git, curl, build-essential, jq, and other dev tools |
+| `devtools` | Installs git, curl, wget, build-essential, jq, unzip/zip, openssh-client and other dev tools |
 | `homebrew` | Installs Homebrew (Linuxbrew), pre-creates the Linuxbrew prefix with the right ownership, and adds `brew shellenv` to `~/.profile` |
 | `k8s-tools` | Installs kubectl (latest stable), kubelogin, Helm 4 and yq into `/usr/local/bin` (amd64/arm64, apt or apk); skips any already on PATH |
 | `data-tools` | Installs jq, miller (`mlr`), make, unzip and curl (apt or apk) |
@@ -161,7 +170,10 @@ container2wsl.bat ubuntu:22.04 -b zsh -p powerlevel10k
 |------|--------------|
 | `powerlevel10k` | Installs Oh My Zsh if missing, installs Powerlevel10k and zsh plugins, and updates `~/.zshrc` |
 | `uv` | Installs [uv](https://docs.astral.sh/uv/) into `~/.local/bin` and a uv-managed CPython with `python`/`python3` shims. Set `C2W_UV_PYTHON=3.12` (on the Windows side) to pick a version |
-| `devtools-shell` | Clones [devtools](https://github.com/juaningles/devtools) to `~/devtools` and runs its `install.sh` (bash and zsh setup, aliases, `bin/` scripts). Source: `C2W_DEVTOOLS_REPO` if set, else `C:\code\devtools` if present, else GitHub |
+| `devtools-shell` | Clones [devtools](https://github.com/juaningles/devtools) to `~/devtools` and runs its `install.sh` (bash and zsh setup, aliases, `bin/` scripts). Source: `C2W_DEVTOOLS_REPO` if set, else the `devtools` clone next to container2wsl, else GitHub |
+| `devtools-overlay` | Clones every private overlay folder (see below) to `~/<name>` and links it into devtools with `install.sh --overlay`. Run after `devtools-shell` |
+| `keychain` | Installs [keychain](https://github.com/danielrobbins/keychain) (ssh-agent manager, formerly funtoo/keychain): the apt/apk package (with `openssh-client`) when `-b sudo` is present, else the upstream 2.8.5 script into `~/.local/bin`, which still needs `ssh-agent` from `openssh-client` (bootstrap `devtools` installs it). Run it after `ssh-keys`: keys to load come from `~/.keychain_default_keys` (written by `ssh-keys`, else derived from `~/.ssh` at that moment); devtools starts the agent at shell start, and without devtools an `eval` line goes into `~/.profile` |
+| `ssh-keys` | Copies keys, `config` and `known_hosts` into `~/.ssh` (700/600/644, CRs stripped) from each private overlay's `ssh\` folder in order, or from `C2W_SSH_SOURCE` (e.g. `%USERPROFILE%\.ssh`) when set. **Refuses** a Windows source whose ACL grants access beyond the owner, SYSTEM and Administrators (`lib\ssh-source-check.ps1`, the same rule Windows OpenSSH applies), or a Linux source that is group/other accessible or has a key not 600/400. Configs are concatenated in order; writes `~/.keychain_default_keys` |
 | `brew-python` | `brew install python` and a `python` symlink. Prefer `uv` |
 | `claude` | Installs [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with the native installer (no npm) into `~/.local/bin`. `C2W_CLAUDE_VERSION=stable`, `latest` or a version picks the release |
 | `databricks-ug` | Installs [Databricks Unity Gateway](https://github.com/databricks/unity-gateway) (`ug`, formerly `ucode`) with `uv tool install git+https://github.com/databricks/unity-gateway`, falling back to the legacy `databricks/ucode` URL if that fails, plus the Databricks CLI it signs in with; replaces an old `ucode` install. Needs `-p uv` and `-b sudo`. Then run `ug configure` (or `ug claude`) once in the distro |
@@ -176,7 +188,15 @@ container2wsl.bat ubuntu:24.04 -n dev -u alice ^
   -p powerlevel10k -p uv -p devtools-shell
 ```
 
-Straps you keep elsewhere (for example in a private repo) are passed by path: `-p C:\code\my-overlay\straps\overlay`.
+### Private overlays
+
+A private overlay is a folder (usually a private git repo) with your own aliases, scripts, straps and ssh material, laid out as devtools' `docs/OVERLAY.md` describes. container2wsl finds them three ways, first match wins:
+
+1. `--private DIR` on the command line (repeatable);
+2. `C2W_PRIVATE_DIRS`, a `;`-separated list;
+3. every sibling folder of the container2wsl clone that contains an empty `.devtools-overlay` marker file, in name order. Clone `devtools-private` and `devtools-unisys` next to `docker2wsl` and nothing needs configuring.
+
+What they get you: `-p devtools-overlay` installs each one into the distro; a bare strap name also resolves from each folder's `straps\`, `bootstraps\` and `poststraps\`; the `ssh-keys` poststrap reads their `ssh\` folders; and the build manifest records their paths and git commits. Straps kept anywhere else are still passed by path: `-p D:\somewhere\my-strap`.
 
 ### Writing strap files
 

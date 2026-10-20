@@ -354,6 +354,34 @@ call "%HELPERS%" assert_output_contains "%OUT%" "/etc/zsh/zlogin" "motd: hooks z
 call "%HELPERS%" assert_output_contains "%OUT%" "c2w-manifest --short" "motd: runs the short summary"
 
 :: ============================================================
+::  20c. Straps resolve from private folders; strap/script path variables expand
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m bare names resolve from a private folder and path variables expand
+call :reset_mocks 2>nul
+set "_PV=%C2W_TMPDIR%\priv_res"
+if not exist "%_PV%\straps" mkdir "%_PV%\straps"
+if not exist "%_PV%\poststraps" mkdir "%_PV%\poststraps"
+> "%_PV%\straps\pv-boot" echo echo strap %%C2W_STRAP_DIR_LX%% script %%C2W_SCRIPT_DIR_LX%% private %%C2W_PRIVATE_DIRS_LX%%
+> "%_PV%\poststraps\pv-post" echo echo profile %%C2W_USERPROFILE_LX%%
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-pvres --private "%_PV%" -b pv-boot -p pv-post --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "private-resolve: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap: %_PV%\straps\pv-boot" "private-resolve: bootstrap found in straps\"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap: %_PV%\poststraps\pv-post" "private-resolve: poststrap found in poststraps\"
+call "%HELPERS%" assert_output_contains "%OUT%" "echo strap /mnt/" "private-resolve: C2W_STRAP_DIR_LX expands to an /mnt path"
+call "%HELPERS%" assert_output_contains "%OUT%" "/priv_res/straps script /mnt/" "private-resolve: strap dir is the private straps folder"
+call "%HELPERS%" assert_output_contains "%OUT%" "private /mnt/" "private-resolve: C2W_PRIVATE_DIRS_LX expands"
+call "%HELPERS%" assert_output_contains "%OUT%" "echo profile /mnt/" "private-resolve: C2W_USERPROFILE_LX expands"
+call "%HELPERS%" assert_output_not_contains "%OUT%" "%%C2W_" "private-resolve: no variable left unexpanded"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m built-in strap wins over a private one of the same name
+> "%_PV%\straps\sudo" echo echo private sudo
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-pvwin --private "%_PV%" -b sudo --dry-run > "%OUT%" 2>&1
+call "%HELPERS%" assert_output_contains "%OUT%" "NOPASSWD" "private-precedence: built-in sudo used"
+call "%HELPERS%" assert_output_not_contains "%OUT%" "private sudo" "private-precedence: private copy not used"
+
+:: ============================================================
 ::  21. New straps are safe in CMD's command display
 ::      (no stray redirect files in CWD, all commands listed)
 :: ============================================================
@@ -364,7 +392,7 @@ set "_CWD=%C2W_TMPDIR%\straps_cwd"
 if exist "%_CWD%" rmdir /s /q "%_CWD%" >nul 2>&1
 mkdir "%_CWD%"
 pushd "%_CWD%"
-call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -b motd -p uv -p devtools-shell -p claude -p databricks-ug > "%OUT%" 2>&1
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -b motd -p uv -p devtools-shell -p devtools-overlay -p ssh-keys -p keychain -p claude -p databricks-ug > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 popd
 set "_STRAY=0"
@@ -377,6 +405,9 @@ call "%HELPERS%" assert_output_contains "%OUT%" "python --version" "straps-dryru
 call "%HELPERS%" assert_output_contains "%OUT%" "devtools/install.sh" "straps-dryrun: last devtools-shell command listed"
 call "%HELPERS%" assert_output_contains "%OUT%" "claude --version" "straps-dryrun: last claude command listed"
 call "%HELPERS%" assert_output_contains "%OUT%" "databricks --version" "straps-dryrun: last databricks-ug command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "devtools/overlays" "straps-dryrun: last devtools-overlay command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "config not validated" "straps-dryrun: last ssh-keys command listed"
+call "%HELPERS%" assert_output_contains "%OUT%" "--version 2>&1 | head -1" "straps-dryrun: last keychain command listed"
 rmdir /s /q "%_CWD%" >nul 2>&1
 
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"

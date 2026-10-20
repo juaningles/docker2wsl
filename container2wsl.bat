@@ -3,6 +3,9 @@
 setlocal
 set "C2W_ARGV=%*"
 set "C2W_CWD=%CD%"
+:: An inherited C2W_PRIVATE_DIRS is an input (default for --private); the script rebuilds the
+:: variable itself, so keep the caller's value under another name.
+set "C2W_PRIVATE_DIRS_IN=%C2W_PRIVATE_DIRS%"
 :: Script folder, captured before argument parsing: plain `shift` also shifts %0,
 :: so %~dp0 is wrong in the main flow afterwards (subroutines are fine).
 set "C2W_SCRIPT_DIR=%~dp0"
@@ -21,6 +24,9 @@ setlocal enabledelayedexpansion
 ::    --location, -l <path>   WSL storage    (default: C:\wsl-storage)
 ::    --bootstrap, -b <file>  Run commands from file as root after setup (repeatable)
 ::    --poststrap, -p <file>  Run commands from file as user after setup (repeatable)
+::    --private <dir>         Private overlay folder (repeatable). Default: C2W_PRIVATE_DIRS
+::                            (semicolon list), else sibling folders of this script that
+::                            contain a .devtools-overlay marker file.
 ::    --force,    -f          Overwrite existing WSL distro with same name
 ::    --dry-run               Parse and print config, do not execute
 ::    --help,     -h          Show this help
@@ -30,14 +36,23 @@ setlocal enabledelayedexpansion
 ::    %C2W_USER%       Default Linux user
 ::    %C2W_IMAGE%      Docker image name
 ::    %C2W_LOCATION%   WSL storage root path
+::    %C2W_SCRIPT_DIR%       this script's folder (Windows, trailing \)
+::    %C2W_SCRIPT_DIR_LX%    the same as /mnt/<drive>/... (no trailing /)
+::    %C2W_STRAP_DIR%        folder of the strap being run (Windows, trailing \)
+::    %C2W_STRAP_DIR_LX%     the same as /mnt/<drive>/...
+::    %C2W_USERPROFILE_LX%   the Windows user profile as /mnt/<drive>/Users/<name>
+::    %C2W_PRIVATE_DIRS%     private overlay folders, Windows paths, ; separated
+::    %C2W_PRIVATE_DIRS_LX%  the same as /mnt paths, : separated
 ::    (plus any standard environment variables)
+::  Bare strap names resolve from bootstraps\ / poststraps\ here, then from each private
+::  folder's straps\, bootstraps\ and poststraps\.
 :: ============================================================
 
 set "VERSION=1.0.0"
 set "SCRIPT_NAME=%~n0"
 
-:: --- Defaults ---
-set "DEFAULT_STORAGE=C:\wsl-storage"
+:: --- Defaults (C2W_LOCATION overrides the storage root for every build) ---
+if defined C2W_LOCATION (set "DEFAULT_STORAGE=%C2W_LOCATION%") else set "DEFAULT_STORAGE=%SystemDrive%\wsl-storage"
 set "DEFAULT_USER=wsluser"
 
 :: --- Runtime flags ---
@@ -51,6 +66,7 @@ set "ARG_WSL_USER="
 set "ARG_WSL_LOCATION="
 set "ARG_BOOTSTRAP_N=0"
 set "ARG_POSTSTRAP_N=0"
+set "ARG_PRIVATE_N=0"
 
 :: ============================================================
 ::  ARGUMENT PARSING
@@ -72,6 +88,7 @@ if "%~1"=="--bootstrap" goto :arg_bootstrap
 if "%~1"=="-b"          goto :arg_bootstrap
 if "%~1"=="--poststrap" goto :arg_poststrap
 if "%~1"=="-p"          goto :arg_poststrap
+if "%~1"=="--private"   goto :arg_private
 if not defined ARG_IMAGE goto :arg_image
 echo [ERROR] Unexpected argument: %~1
 echo.
@@ -246,6 +263,22 @@ echo [ERROR] Missing value for option: %~1
 echo.
 goto :show_help_error
 
+:arg_private
+if "%~2"=="" (
+    echo [ERROR] Missing value for option: %~1
+    echo.
+    goto :show_help_error
+)
+if not exist "%~2\" (
+    echo [ERROR] --private folder not found: %~2
+    exit /b 1
+)
+set /a ARG_PRIVATE_N+=1
+set "ARG_PRIVATE_!ARG_PRIVATE_N!=%~f2"
+shift
+shift
+goto :parse_args
+
 :arg_image
 set "ARG_IMAGE=%~1"
 shift
@@ -271,38 +304,58 @@ if not defined ARG_WSL_NAME (
     set "ARG_WSL_NAME=!ARG_WSL_NAME:\=-!"
 )
 
-:: --- Resolve bootstrap paths: try <script_dir>\bootstraps\<name> if not found as-is ---
-if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do call :resolve_bootstrap %%i
+:: --- Private overlay folders: --private, else C2W_PRIVATE_DIRS, else siblings with a marker ---
+set "C2W_PRIVATE_DIRS="
+set "C2W_PRIVATE_DIRS_LX="
+if %ARG_PRIVATE_N% geq 1 (
+    for /l %%i in (1,1,%ARG_PRIVATE_N%) do call :add_private "!ARG_PRIVATE_%%i!"
+) else if defined C2W_PRIVATE_DIRS_IN (
+    for %%d in ("!C2W_PRIVATE_DIRS_IN:;=" "!") do if not "%%~d"=="" call :add_private "%%~fd"
+) else (
+    for /d %%d in ("%C2W_SCRIPT_DIR%..\*") do if exist "%%~fd\.devtools-overlay" call :add_private "%%~fd"
+)
 
-:: --- Resolve poststrap paths: same logic as bootstrap ---
-if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do call :resolve_poststrap %%i
+:: --- Paths every strap can use: this script and the Windows profile, in /mnt form ---
+call :win2lx "%C2W_SCRIPT_DIR%" C2W_SCRIPT_DIR_LX
+call :win2lx "%USERPROFILE%" C2W_USERPROFILE_LX
+
+:: --- Resolve strap paths: as given, then <script_dir>\bootstraps|poststraps\<name>, then private folders ---
+if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do call :resolve_strap ARG_BOOTSTRAP_%%i bootstraps
+if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do call :resolve_strap ARG_POSTSTRAP_%%i poststraps
 
 goto :main
 
-:resolve_bootstrap
-set "_RB_VAL=!ARG_BOOTSTRAP_%~1!"
-if exist "%_RB_VAL%" goto :eof
-if exist "%~dp0bootstraps\%_RB_VAL%" (
-    set "ARG_BOOTSTRAP_%~1=%~dp0bootstraps\%_RB_VAL%"
-    goto :eof
-)
-if exist "%~dp0%_RB_VAL%" (
-    set "ARG_BOOTSTRAP_%~1=%~dp0%_RB_VAL%"
-    goto :eof
+:add_private
+:: %~1 = folder (full path). Appends to C2W_PRIVATE_DIRS (;) and C2W_PRIVATE_DIRS_LX (:), no duplicates.
+set "_AP=%~f1"
+if "!_AP:~-1!"=="\" set "_AP=!_AP:~0,-1!"
+if defined C2W_PRIVATE_DIRS if not "!C2W_PRIVATE_DIRS:%_AP%=!"=="!C2W_PRIVATE_DIRS!" goto :eof
+call :win2lx "%_AP%" _AP_LX
+if defined C2W_PRIVATE_DIRS (set "C2W_PRIVATE_DIRS=!C2W_PRIVATE_DIRS!;%_AP%") else set "C2W_PRIVATE_DIRS=%_AP%"
+if defined C2W_PRIVATE_DIRS_LX (set "C2W_PRIVATE_DIRS_LX=!C2W_PRIVATE_DIRS_LX!:!_AP_LX!") else set "C2W_PRIVATE_DIRS_LX=!_AP_LX!"
+goto :eof
+
+:resolve_strap
+:: %~1 = variable holding the strap as given   %~2 = bootstraps or poststraps
+set "_RS_VAL=!%~1!"
+if exist "%_RS_VAL%" goto :eof
+if exist "%C2W_SCRIPT_DIR%%~2\%_RS_VAL%" (set "%~1=%C2W_SCRIPT_DIR%%~2\%_RS_VAL%" & goto :eof)
+if exist "%C2W_SCRIPT_DIR%%_RS_VAL%"      (set "%~1=%C2W_SCRIPT_DIR%%_RS_VAL%" & goto :eof)
+if not defined C2W_PRIVATE_DIRS goto :eof
+for %%d in ("!C2W_PRIVATE_DIRS:;=" "!") do (
+    if exist "%%~d\straps\%_RS_VAL%" (set "%~1=%%~d\straps\%_RS_VAL%" & goto :eof)
+    if exist "%%~d\%~2\%_RS_VAL%"   (set "%~1=%%~d\%~2\%_RS_VAL%" & goto :eof)
 )
 goto :eof
 
-:resolve_poststrap
-set "_RB_VAL=!ARG_POSTSTRAP_%~1!"
-if exist "%_RB_VAL%" goto :eof
-if exist "%~dp0poststraps\%_RB_VAL%" (
-    set "ARG_POSTSTRAP_%~1=%~dp0poststraps\%_RB_VAL%"
-    goto :eof
-)
-if exist "%~dp0%_RB_VAL%" (
-    set "ARG_POSTSTRAP_%~1=%~dp0%_RB_VAL%"
-    goto :eof
-)
+:win2lx
+:: %~1 = Windows path   %~2 = variable to receive /mnt/<drive>/path (lowercase drive, no trailing /)
+set "_W2L=%~1"
+set "_W2L=!_W2L:\=/!"
+if "!_W2L:~-1!"=="/" set "_W2L=!_W2L:~0,-1!"
+set "_W2L_D=!_W2L:~0,1!"
+for %%L in (a b c d e f g h i j k l m n o p q r s t u v w x y z) do if /i "!_W2L_D!"=="%%L" set "_W2L_D=%%L"
+set "%~2=/mnt/!_W2L_D!!_W2L:~2!"
 goto :eof
 
 :: ============================================================
@@ -327,6 +380,8 @@ echo  --user,     -u USER  Default Linux user    (default: %DEFAULT_USER%)
 echo  --location, -l PATH  WSL storage root      (default: %DEFAULT_STORAGE%)
 echo  --bootstrap, -b FILE Run commands from FILE as root after setup (repeatable)
 echo  --poststrap, -p FILE Run commands from FILE as user after setup (repeatable)
+echo  --private DIR        Private overlay folder for straps/ssh-keys (repeatable; default:
+echo                       C2W_PRIVATE_DIRS, else siblings with a .devtools-overlay marker)
 echo  --force,    -f       Overwrite existing WSL distro with same name
 echo  --dry-run            Show resolved config without executing
 echo  --help,     -h       Show this help
@@ -357,6 +412,8 @@ echo  User     : %ARG_WSL_USER%
 echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
 if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do echo  Bootstrap: !ARG_BOOTSTRAP_%%i!
 if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do echo  Poststrap: !ARG_POSTSTRAP_%%i!
+if defined C2W_PRIVATE_DIRS for %%d in ("!C2W_PRIVATE_DIRS:;=" "!") do echo  Private  : %%~d
+if not defined C2W_PRIVATE_DIRS echo  Private  : none (no --private, C2W_PRIVATE_DIRS or sibling .devtools-overlay marker)
 if %FORCE%==1 echo  Force    : yes (overwrite existing distro)
 if exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" echo  Manifest : /etc/container2wsl/manifest.jsonl, copy in !ARG_WSL_LOCATION!\!ARG_WSL_NAME!
 if not exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" echo  Manifest : off - lib\manifest.ps1 not found next to the script
@@ -382,6 +439,7 @@ if not exist "%~1" (
     exit /b 0
 )
 echo [DRY-RUN] Bootstrap commands from: %~1 (as root)
+call :set_strap_dir "%~1"
 for /f "usebackq delims= eol=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
@@ -399,6 +457,7 @@ if not exist "%~1" (
     exit /b 0
 )
 echo [DRY-RUN] Poststrap commands from: %~1 (as %C2W_USER%)
+call :set_strap_dir "%~1"
 for /f "usebackq delims= eol=" %%L in ("%~1") do (
     set "_BS_LINE=%%L"
     if not "!_BS_LINE!"=="" if not "!_BS_LINE:~0,1!"=="#" (
@@ -677,9 +736,7 @@ call %WSL_CMD% -d %~1 -u root -- usermod -aG sudo "%~2" >nul 2>&1
 set "_WCFG_CONF=%TEMP%\c2w_wsl.conf"
 (echo [user]) > "%_WCFG_CONF%"
 (echo default=%~2) >> "%_WCFG_CONF%"
-set "_WCFG_CONF_LX=%_WCFG_CONF:\=/%"
-set "_WCFG_CONF_LX=%_WCFG_CONF_LX:C:/=/mnt/c/%"
-set "_WCFG_CONF_LX=%_WCFG_CONF_LX:c:/=/mnt/c/%"
+call :win2lx "%_WCFG_CONF%" _WCFG_CONF_LX
 set "_WCFG_CP_TMP=%TEMP%\c2w_wslcp.tmp"
 call %WSL_CMD% -d %~1 -u root -- cp "%_WCFG_CONF_LX%" /etc/wsl.conf > "%_WCFG_CP_TMP%" 2>&1
 set "_WCFG_CP_RC=%errorlevel%"
@@ -771,6 +828,7 @@ if not exist "%~2" (
 )
 set "_BS_COUNT=0"
 set "_BS_TMP=%TEMP%\c2w_bootstrap.tmp"
+call :set_strap_dir "%~2"
 :: Count commands and display them (with variable expansion for user feedback)
 for /f "usebackq delims=" %%L in ("%~2") do (
     set "_BS_LINE=%%L"
@@ -795,9 +853,7 @@ powershell -noprofile -command ^
   "  } " ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_BS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
-set "_BS_SH_LX=%_BS_SH:\=/%"
-set "_BS_SH_LX=!_BS_SH_LX:C:/=/mnt/c/!"
-set "_BS_SH_LX=!_BS_SH_LX:c:/=/mnt/c/!"
+call :win2lx "%_BS_SH%" _BS_SH_LX
 call %WSL_CMD% -d %~1 -u root -- bash !_BS_SH_LX! > "%_BS_TMP%" 2>&1
 set "_BS_RC=!errorlevel!"
 set "_BS_FAIL=0"
@@ -831,6 +887,7 @@ if not exist "%~2" (
 )
 set "_PS_COUNT=0"
 set "_PS_TMP=%TEMP%\c2w_poststrap.tmp"
+call :set_strap_dir "%~2"
 :: Count commands and display them (with variable expansion for user feedback)
 for /f "usebackq delims=" %%L in ("%~2") do (
     set "_PS_LINE=%%L"
@@ -854,9 +911,7 @@ powershell -noprofile -command ^
   "  } " ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_PS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
-set "_PS_SH_LX=%_PS_SH:\=/%"
-set "_PS_SH_LX=!_PS_SH_LX:C:/=/mnt/c/!"
-set "_PS_SH_LX=!_PS_SH_LX:c:/=/mnt/c/!"
+call :win2lx "%_PS_SH%" _PS_SH_LX
 call %WSL_CMD% -d %~1 -u %~6 -- bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
 set "_PS_RC=!errorlevel!"
 set "_PS_FAIL=0"
@@ -894,9 +949,7 @@ if errorlevel 1 (
     echo       [WARN] Manifest: could not record '%~1'. The build itself is unaffected.
     exit /b 0
 )
-set "_M_LX=%C2W_M_TMP:\=/%"
-set "_M_LX=!_M_LX:C:/=/mnt/c/!"
-set "_M_LX=!_M_LX:c:/=/mnt/c/!"
+call :win2lx "%C2W_M_TMP%" _M_LX
 call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 644 "!_M_LX!" /etc/container2wsl/manifest.jsonl >nul 2>&1
 if "%~1"=="create" call :manifest_tool
 exit /b 0
@@ -908,14 +961,19 @@ exit /b 0
 :: and CRs are stripped in case the checkout has CRLF line endings.
 if not exist "%C2W_SCRIPT_DIR%lib\c2w-manifest" exit /b 0
 copy /y "%C2W_SCRIPT_DIR%lib\c2w-manifest" "%TEMP%\c2w-manifest" >nul 2>&1
-set "_MT_LX=%TEMP%\c2w-manifest"
-set "_MT_LX=!_MT_LX:\=/!"
-set "_MT_LX=!_MT_LX:C:/=/mnt/c/!"
-set "_MT_LX=!_MT_LX:c:/=/mnt/c/!"
+call :win2lx "%TEMP%\c2w-manifest" _MT_LX
 call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 755 "!_MT_LX!" /usr/local/bin/c2w-manifest >nul 2>&1
 call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- sed -i "s/\r//" /usr/local/bin/c2w-manifest >nul 2>&1
 del /f /q "%TEMP%\c2w-manifest" >nul 2>&1
 exit /b 0
+
+
+:set_strap_dir
+:: %~1 = strap file. Exposes its folder to the strap as %C2W_STRAP_DIR% (Windows, trailing \)
+:: and %C2W_STRAP_DIR_LX%, so straps in a private repo can reach their repo with "..".
+set "C2W_STRAP_DIR=%~dp1"
+call :win2lx "%~dp1" C2W_STRAP_DIR_LX
+goto :eof
 
 
 :manifest_strap

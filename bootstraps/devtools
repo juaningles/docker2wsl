@@ -3,5 +3,5 @@ apt-get install -y \
   git curl wget \
   build-essential \
   jq unzip zip \
-  ca-certificates gnupg \
+  ca-certificates gnupg openssh-client \
   htop tree less

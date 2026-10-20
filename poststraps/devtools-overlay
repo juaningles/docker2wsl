@@ -1,0 +1,24 @@
+# Install every private overlay folder (--private, C2W_PRIVATE_DIRS, or sibling folders of
+# container2wsl with a .devtools-overlay marker) into the distro: clone each to ~/<folder name>
+# with the Windows clone as origin, then link it with devtools' install.sh --overlay.
+# Run after poststrap devtools-shell. Needs git (bootstrap devtools).
+# Also runnable on an existing distro: C2W_PRIVATE_DIRS_LX=/mnt/c/code/my-overlay bash poststraps/devtools-overlay
+if ! command -v git >/dev/null 2>&1; then echo "[ERROR] git is not installed. Run bootstrap 'devtools' first."; exit 1; fi
+if [ ! -x $HOME/devtools/install.sh ]; then echo "[ERROR] devtools is not installed. Run poststrap 'devtools-shell' first."; exit 1; fi
+DIRS="%C2W_PRIVATE_DIRS_LX%"
+case "$DIRS" in *C2W_PRIVATE_DIRS_LX*) DIRS="$C2W_PRIVATE_DIRS_LX" ;; esac
+if [ -z "$DIRS" ]; then echo "devtools-overlay: no private overlay folders detected, nothing to do"; exit 0; fi
+IFS=:
+for SRC in $DIRS; do
+    unset IFS
+    NAME=$(basename "$SRC")
+    if [ ! -d "$SRC/.git" ]; then echo "devtools-overlay: $SRC is not a git repo, skipped"; continue; fi
+    # /mnt/c repos are not owned by this user (git: dubious ownership); trust them for clone, pull and sync
+    for D in "$SRC" "$SRC/.git"; do git config --global --get-all safe.directory | grep -qxF "$D" || git config --global --add safe.directory "$D"; done
+    echo "devtools-overlay: $NAME from $SRC"
+    if [ -d "$HOME/$NAME/.git" ]; then git -C "$HOME/$NAME" pull --ff-only; else git clone "$SRC" "$HOME/$NAME"; fi
+    bash $HOME/devtools/install.sh --overlay "$HOME/$NAME" | grep -i overlay
+    IFS=:
+done
+unset IFS
+ls $HOME/devtools/overlays

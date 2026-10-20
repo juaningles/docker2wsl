@@ -214,8 +214,9 @@ for /f "usebackq tokens=*" %%n in ("!_WSL_ASCII2!") do (
 )
 del /f /q "!_WSL_TMP2!" "!_WSL_ASCII2!" >nul 2>&1
 
-:: Also clean up storage dirs under C:\wsl-storage matching our test ID
-for /d %%d in ("C:\wsl-storage\!C2W_TEST_ID!*") do (
+:: Also clean up storage dirs under the storage root (C2W_LOCATION, else %SystemDrive%\wsl-storage) matching our test ID
+if not defined C2W_LOCATION set "C2W_LOCATION=%SystemDrive%\wsl-storage"
+for /d %%d in ("!C2W_LOCATION!\!C2W_TEST_ID!*") do (
     rmdir /s /q "%%d" >nul 2>&1
 )
 if !_CLEANED! gtr 0 echo.

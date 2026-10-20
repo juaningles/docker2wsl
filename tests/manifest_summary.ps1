@@ -23,6 +23,7 @@ try {
     $lines += 'bootstrap.requested=' + ((@($c.straps.bootstrap) | ForEach-Object { $_.requested }) -join ',')
     $lines += 'poststrap.requested=' + ((@($c.straps.poststrap) | ForEach-Object { $_.requested }) -join ',')
     $lines += "tool.version=$($c.tool.version)"
+    $lines += 'private=' + ((@($c.private) | ForEach-Object { $_.path }) -join ',')
   }
   $i = 0
   foreach ($s in ($recs | Where-Object { $_.event -eq 'strap' })) {

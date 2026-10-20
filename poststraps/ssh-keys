@@ -1,0 +1,84 @@
+# Copy ssh keys, config and known_hosts into ~/.ssh with the right modes, from the ssh/ folder of
+# each private overlay (C2W_PRIVATE_DIRS) in order, or from C2W_SSH_SOURCE (a Windows or Linux
+# folder, e.g. %%USERPROFILE%%\.ssh) when set. Nothing is copied by default from anywhere else.
+#
+# Source folders are checked first, mirroring ssh's own rules, and the strap REFUSES to copy if:
+#   - a Windows source (under /mnt) grants access to anyone but the owner, SYSTEM and Administrators
+#     (lib\ssh-source-check.ps1 through WSL interop; POSIX modes mean nothing under /mnt), or
+#   - a Linux source dir is group/other accessible, or a private key is not 0600/0400.
+#   C2W_SSH_ACL_CHECK=off skips the Windows check (not recommended).
+# Several sources: later ones override files of the same name; config files are concatenated in
+# order (ssh uses the first matching Host block, so earlier sources win inside config).
+# Also writes ~/.keychain_default_keys (used by the keychain poststrap and devtools). Key names are
+# printed, key material never is. Also runnable on an existing distro: bash poststraps/ssh-keys
+SRC="%C2W_SSH_SOURCE%"
+case "$SRC" in *C2W_SSH_SOURCE*) SRC= ;; esac
+DIRS="%C2W_PRIVATE_DIRS_LX%"
+case "$DIRS" in *C2W_PRIVATE_DIRS_LX*) DIRS="$C2W_PRIVATE_DIRS_LX" ;; esac
+CHECK='%C2W_SCRIPT_DIR%lib\ssh-source-check.ps1'
+case "$CHECK" in *C2W_SCRIPT_DIR*) CHECK= ;; esac
+ACL="%C2W_SSH_ACL_CHECK%"
+case "$ACL" in *C2W_SSH_ACL_CHECK*) ACL=on ;; esac
+PS=$(command -v powershell.exe || ls /mnt/*/Windows/System32/WindowsPowerShell/v1.0/powershell.exe 2>/dev/null | head -1)
+is_key() { case "$1" in *.pub|config|known_hosts*|authorized_keys|README*|*.md) return 1 ;; *) return 0 ;; esac; }
+# collect source dirs
+SOURCES=
+if [ -n "$SRC" ]; then
+    case "$SRC" in [A-Za-z]:\\*|[A-Za-z]:/*) SRC=$(wslpath -u "$SRC") ;; esac
+    [ -d "$SRC" ] || { echo "[ERROR] C2W_SSH_SOURCE folder not found: $SRC"; exit 1; }
+    SOURCES="$SRC"
+else
+    IFS=:; for D in $DIRS; do [ -d "$D/ssh" ] && SOURCES="$SOURCES${SOURCES:+:}$D/ssh"; done; unset IFS
+fi
+if [ -z "$SOURCES" ]; then echo "[ERROR] ssh-keys: no source. Put keys in the ssh/ folder of a private overlay, or set C2W_SSH_SOURCE (e.g. %%USERPROFILE%%\\.ssh)."; exit 1; fi
+# check every source before copying anything
+IFS=:; for S in $SOURCES; do
+    unset IFS
+    case "$S" in
+    /mnt/*)
+        if [ "$ACL" = off ]; then echo "[WARN] ssh-keys: Windows ACL check skipped for $S (C2W_SSH_ACL_CHECK=off)"
+        else
+            [ -n "$PS" ] && [ -n "$CHECK" ] || { echo "[ERROR] ssh-keys: cannot verify Windows ACLs (powershell.exe not reachable or lib/ssh-source-check.ps1 missing). Refusing. Set C2W_SSH_ACL_CHECK=off to override."; exit 1; }
+            # capture to a file: a pipeline's status would be tr's, not powershell's
+            "$PS" -NoProfile -ExecutionPolicy Bypass -File "$CHECK" -Path "$(wslpath -w "$S")" > "$HOME/.c2w-acl.tmp" 2>&1; RC=$?
+            tr -d '\r' < "$HOME/.c2w-acl.tmp"; rm -f "$HOME/.c2w-acl.tmp"
+            [ "$RC" -eq 0 ] || exit 1
+        fi ;;
+    *)
+        M=$(stat -c %a "$S"); case "$M" in *00) ;; *) echo "[ERROR] ssh-keys: $S is mode $M; needs 700 (or 750). Refusing."; exit 1 ;; esac
+        for F in "$S"/*; do [ -f "$F" ] || continue; is_key "$(basename "$F")" || continue
+            M=$(stat -c %a "$F"); case "$M" in 600|400) ;; *) echo "[ERROR] ssh-keys: private key $F is mode $M; needs 600 or 400. Refusing."; exit 1 ;; esac
+        done ;;
+    esac
+    IFS=:
+done; unset IFS
+# copy
+umask 077
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+rm -f "$HOME/.ssh/config.c2w-new"
+N=0
+IFS=:; for S in $SOURCES; do
+    unset IFS
+    echo "ssh-keys: from $S"
+    for F in "$S"/*; do
+        [ -f "$F" ] || continue
+        B=$(basename "$F")
+        case "$B" in README*|*.md) continue ;; esac
+        if [ "$B" = config ]; then { printf '# ---- from %s\n' "$S"; sed 's/\r$//' "$F"; echo; } >> "$HOME/.ssh/config.c2w-new"; echo "  config (appended)"; continue; fi
+        if is_key "$B"; then MODE=600; else case "$B" in *.pub|known_hosts*) MODE=644 ;; *) MODE=600 ;; esac; fi
+        sed 's/\r$//' "$F" > "$HOME/.ssh/$B" && chmod $MODE "$HOME/.ssh/$B" && echo "  $B ($MODE)"
+        N=$((N+1))
+    done
+    IFS=:
+done; unset IFS
+if [ -f "$HOME/.ssh/config.c2w-new" ]; then mv "$HOME/.ssh/config.c2w-new" "$HOME/.ssh/config" && chmod 600 "$HOME/.ssh/config"; fi
+# keys for keychain / devtools env.sh
+: > "$HOME/.keychain_default_keys"
+for F in "$HOME"/.ssh/*; do B=$(basename "$F"); if [ -f "$F" ] && is_key "$B"; then echo "$B" >> "$HOME/.keychain_default_keys"; fi; done
+echo "ssh-keys: $N files; keys for keychain: $(tr '\n' ' ' < "$HOME/.keychain_default_keys")"
+# validate the config (needs ssh; install it when sudo allows, otherwise just say so)
+if ! command -v ssh >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    # full paths: a non-root PATH and sudo's secure_path on Alpine both lack /sbin, where apk lives
+    if command -v apt-get >/dev/null 2>&1; then sudo -n "$(command -v apt-get)" install -y -qq openssh-client >/dev/null 2>&1; elif [ -x /sbin/apk ]; then sudo -n /sbin/apk add --no-cache openssh-client >/dev/null 2>&1; fi
+fi
+if command -v ssh >/dev/null 2>&1; then ssh -G localhost >/dev/null 2>&1 && echo "ssh-keys: config parses (ssh -G)"; else echo "ssh-keys: ssh not installed, config not validated"; fi

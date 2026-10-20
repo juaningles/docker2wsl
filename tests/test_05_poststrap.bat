@@ -300,7 +300,8 @@ call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-dtshell -p devtools-shell > "
 set "_RC=%errorlevel%"
 call "%HELPERS%" assert_exit_zero "%_RC%" "devtools-shell: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "devtools-shell: poststrap complete message"
-call "%HELPERS%" assert_output_contains "%OUT%" "/mnt/c/code/devtools" "devtools-shell: Windows clone fallback shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "SIBLING=" "devtools-shell: sibling devtools clone fallback present"
+call "%HELPERS%" assert_output_contains "%OUT%" "/../devtools" "devtools-shell: fallback is the devtools folder next to container2wsl"
 call "%HELPERS%" assert_output_contains "%OUT%" "github.com/juaningles/devtools.git" "devtools-shell: public repo fallback shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "devtools/install.sh" "devtools-shell: install.sh run shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "safe.directory" "devtools-shell: trusts /mnt/c source repo"
@@ -317,6 +318,63 @@ set "_RC=%errorlevel%"
 set "C2W_DEVTOOLS_REPO="
 call "%HELPERS%" assert_exit_zero "%_RC%" "devtools-repo: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "REPO=https://example.invalid/my/devtools.git" "devtools-repo: C2W_DEVTOOLS_REPO expanded"
+
+:: ============================================================
+::  19b. devtools-overlay built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m devtools-overlay built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "_PV=%C2W_TMPDIR%\priv_ov"
+if not exist "%_PV%" mkdir "%_PV%"
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-dtov --private "%_PV%" -p devtools-overlay > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "devtools-overlay: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "devtools-overlay: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "/priv_ov" "devtools-overlay: C2W_PRIVATE_DIRS_LX expanded into the script"
+call "%HELPERS%" assert_output_contains "%OUT%" "install.sh --overlay" "devtools-overlay: links each repo with install.sh --overlay"
+call "%HELPERS%" assert_output_contains "%OUT%" "safe.directory" "devtools-overlay: trusts the /mnt source repo"
+
+:: ============================================================
+::  19c. ssh-keys built-in poststrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m ssh-keys built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_SSH_SOURCE="
+set "C2W_SSH_ACL_CHECK="
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-sshk -p ssh-keys > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "ssh-keys: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "ssh-keys: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "ssh-source-check.ps1" "ssh-keys: Windows ACL check wired in"
+call "%HELPERS%" assert_output_contains "%OUT%" "needs 700" "ssh-keys: Linux dir mode check present"
+call "%HELPERS%" assert_output_contains "%OUT%" "needs 600 or 400" "ssh-keys: Linux key mode check present"
+call "%HELPERS%" assert_output_contains "%OUT%" "keychain_default_keys" "ssh-keys: writes the keychain key list"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m keychain built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_KEYCHAIN_FALLBACK="
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-kc -p keychain > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "keychain: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "keychain: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "install -y -qq keychain openssh-client" "keychain: package install shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "danielrobbins/keychain/archive/refs/tags" "keychain: upstream script fallback shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "keychain_default_keys" "keychain: key list handled"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m ssh-keys honours C2W_SSH_SOURCE
+call :reset_mocks 2>nul
+:: (no "." in the path: findstr treats a search string with metacharacters as a regex)
+set "C2W_SSH_SOURCE=%C2W_TMPDIR%\sshsrc"
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-sshsrc --dry-run -p ssh-keys > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_SSH_SOURCE="
+call "%HELPERS%" assert_exit_zero "%_RC%" "ssh-source: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "%C2W_TMPDIR%\sshsrc" "ssh-source: C2W_SSH_SOURCE expanded"
 
 :: ============================================================
 ::  20. claude built-in poststrap

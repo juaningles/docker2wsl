@@ -30,8 +30,10 @@ set "C2W_MOCK_LOG=%C2W_TMPDIR%\mock_mf1.log"
 if exist "%C2W_MOCK_LOG%" del /f /q "%C2W_MOCK_LOG%" >nul 2>&1
 set "_N=%C2W_TEST_ID%-mf1"
 
+set "_PV=%C2W_TMPDIR%\priv_mf"
+if not exist "%_PV%" mkdir "%_PV%"
 pushd "%TEMP%"
-call "%SCRIPT%" ubuntu:24.04 -n %_N% -u alice -l "%STORE%" -b sudo -p uv > "%OUT%" 2>&1
+call "%SCRIPT%" ubuntu:24.04 -n %_N% -u alice -l "%STORE%" --private "%_PV%" -b sudo -p uv > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 popd
 set "_MF=%STORE%\%_N%\container2wsl-manifest.jsonl"
@@ -51,6 +53,7 @@ call "%HELPERS%" assert_output_contains "%SUM%" "distro.user=alice" "mf-full: di
 call "%HELPERS%" assert_output_contains "%SUM%" "distro.os.isnull=True" "mf-full: unknown os is null, not {}"
 call "%HELPERS%" assert_output_contains "%SUM%" "bootstrap.requested=sudo" "mf-full: requested bootstrap name kept"
 call "%HELPERS%" assert_output_contains "%SUM%" "poststrap.requested=uv" "mf-full: requested poststrap name kept"
+call "%HELPERS%" assert_output_contains "%SUM%" "private=%_PV%" "mf-full: private overlay folder recorded"
 call "%HELPERS%" assert_output_contains "%SUM%" "strap1=bootstrap sudo ok as=root copy=/etc/container2wsl/straps/01-bootstrap-sudo.sh sha=True rsha=True" "mf-full: bootstrap record"
 call "%HELPERS%" assert_output_contains "%SUM%" "strap2=poststrap uv ok as=alice copy=/etc/container2wsl/straps/02-poststrap-uv.sh sha=True rsha=True" "mf-full: poststrap record"
 call "%HELPERS%" assert_output_contains "%SUM%" "complete=ok failed=" "mf-full: complete ok"

@@ -139,4 +139,52 @@ call "%HELPERS%" assert_exit_zero "%_RC%" "resolve-poststrap-bare: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "poststraps\powerlevel10k" "resolve-poststrap-bare: resolved to poststraps\powerlevel10k"
 call "%HELPERS%" assert_output_contains "%OUT%" "omz-install.sh" "resolve-poststrap-bare: oh-my-zsh install commands listed"
 
+:: ---- Test: --private folders: explicit, missing, env list, auto-detected marker ----
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m --private folder shown in banner
+set "_PV=%C2W_TMPDIR%\priv one"
+if not exist "%_PV%\straps" mkdir "%_PV%\straps"
+call "%SCRIPT%" ubuntu:22.04 --private "%_PV%" --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "private: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Private  : %_PV%" "private: folder with a space shown in banner"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m --private missing folder is an error
+call "%SCRIPT%" ubuntu:22.04 --private "%C2W_TMPDIR%\no_such_private" --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_nonzero "%_RC%" "private-missing: non-zero exit"
+call "%HELPERS%" assert_output_contains "%OUT%" "--private folder not found" "private-missing: error names the option"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m C2W_PRIVATE_DIRS lists two folders
+set "_PV2=%C2W_TMPDIR%\priv_two"
+if not exist "%_PV2%" mkdir "%_PV2%"
+set "C2W_PRIVATE_DIRS=%_PV%;%_PV2%"
+call "%SCRIPT%" ubuntu:22.04 --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_PRIVATE_DIRS="
+call "%HELPERS%" assert_exit_zero "%_RC%" "private-env: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Private  : %_PV%" "private-env: first folder"
+call "%HELPERS%" assert_output_contains "%OUT%" "Private  : %_PV2%" "private-env: second folder"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m sibling folder with .devtools-overlay marker is auto-detected
+:: a copy of the script in its own folder, with a marked and an unmarked sibling
+set "_RELOC=%C2W_TMPDIR%\reloc"
+if not exist "%_RELOC%\docker2wsl" mkdir "%_RELOC%\docker2wsl"
+if not exist "%_RELOC%\marked\straps" mkdir "%_RELOC%\marked\straps"
+if not exist "%_RELOC%\unmarked" mkdir "%_RELOC%\unmarked"
+type nul > "%_RELOC%\marked\.devtools-overlay"
+copy /y "%SCRIPT%" "%_RELOC%\docker2wsl\container2wsl.bat" >nul 2>&1
+call "%_RELOC%\docker2wsl\container2wsl.bat" ubuntu:22.04 --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "private-marker: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Private  : %_RELOC%\marked" "private-marker: marked sibling detected"
+call "%HELPERS%" assert_output_not_contains "%OUT%" "Private  : %_RELOC%\unmarked" "private-marker: unmarked sibling ignored"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m default storage root follows SystemDrive
+call "%SCRIPT%" ubuntu:22.04 --dry-run > "%OUT%" 2>&1
+call "%HELPERS%" assert_output_contains "%OUT%" "Location : %SystemDrive%\wsl-storage\ubuntu-22.04" "storage-default: %SystemDrive%\wsl-storage"
+set "C2W_LOCATION=%C2W_TMPDIR%\store_env"
+call "%SCRIPT%" ubuntu:22.04 --dry-run > "%OUT%" 2>&1
+set "C2W_LOCATION="
+call "%HELPERS%" assert_output_contains "%OUT%" "Location : %C2W_TMPDIR%\store_env\ubuntu-22.04" "storage-env: C2W_LOCATION overrides the root"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
