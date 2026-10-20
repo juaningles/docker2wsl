@@ -340,6 +340,20 @@ call "%HELPERS%" assert_output_contains "%OUT%" "aka.ms/InstallAzureCLIDeb" "azu
 call "%HELPERS%" assert_output_contains "%OUT%" "az version" "azure-cli: version check shown"
 
 :: ============================================================
+::  20b. motd built-in bootstrap
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m motd built-in bootstrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-motd -b motd > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "motd: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "motd: bootstrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "/etc/zsh/zlogin" "motd: hooks zsh login"
+call "%HELPERS%" assert_output_contains "%OUT%" "c2w-manifest --short" "motd: runs the short summary"
+
+:: ============================================================
 ::  21. New straps are safe in CMD's command display
 ::      (no stray redirect files in CWD, all commands listed)
 :: ============================================================
@@ -350,7 +364,7 @@ set "_CWD=%C2W_TMPDIR%\straps_cwd"
 if exist "%_CWD%" rmdir /s /q "%_CWD%" >nul 2>&1
 mkdir "%_CWD%"
 pushd "%_CWD%"
-call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -p uv -p devtools-shell -p claude -p databricks-ug > "%OUT%" 2>&1
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-strapdry --dry-run -b k8s-tools -b data-tools -b azure-cli -b motd -p uv -p devtools-shell -p claude -p databricks-ug > "%OUT%" 2>&1
 set "_RC=%errorlevel%"
 popd
 set "_STRAY=0"

@@ -898,6 +898,23 @@ set "_M_LX=%C2W_M_TMP:\=/%"
 set "_M_LX=!_M_LX:C:/=/mnt/c/!"
 set "_M_LX=!_M_LX:c:/=/mnt/c/!"
 call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 644 "!_M_LX!" /etc/container2wsl/manifest.jsonl >nul 2>&1
+if "%~1"=="create" call :manifest_tool
+exit /b 0
+
+
+:manifest_tool
+:: Install lib\c2w-manifest (summary report: c2w-manifest / c2w-manifest --short)
+:: as /usr/local/bin/c2w-manifest. Copied via TEMP so the /mnt/c path rule above applies,
+:: and CRs are stripped in case the checkout has CRLF line endings.
+if not exist "%C2W_SCRIPT_DIR%lib\c2w-manifest" exit /b 0
+copy /y "%C2W_SCRIPT_DIR%lib\c2w-manifest" "%TEMP%\c2w-manifest" >nul 2>&1
+set "_MT_LX=%TEMP%\c2w-manifest"
+set "_MT_LX=!_MT_LX:\=/!"
+set "_MT_LX=!_MT_LX:C:/=/mnt/c/!"
+set "_MT_LX=!_MT_LX:c:/=/mnt/c/!"
+call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 755 "!_MT_LX!" /usr/local/bin/c2w-manifest >nul 2>&1
+call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- sed -i "s/\r//" /usr/local/bin/c2w-manifest >nul 2>&1
+del /f /q "%TEMP%\c2w-manifest" >nul 2>&1
 exit /b 0
 
 

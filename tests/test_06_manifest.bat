@@ -56,6 +56,7 @@ call "%HELPERS%" assert_output_contains "%SUM%" "strap2=poststrap uv ok as=alice
 call "%HELPERS%" assert_output_contains "%SUM%" "complete=ok failed=" "mf-full: complete ok"
 call "%HELPERS%" assert_output_contains "%C2W_MOCK_LOG%" "/etc/container2wsl/manifest.jsonl" "mf-full: manifest copied into the distro"
 call "%HELPERS%" assert_output_contains "%C2W_MOCK_LOG%" "install -D -m 600" "mf-full: rendered scripts kept root-only"
+call "%HELPERS%" assert_output_contains "%C2W_MOCK_LOG%" "/usr/local/bin/c2w-manifest" "mf-full: c2w-manifest summary command installed"
 
 :: ============================================================
 ::  2. Pulled image is flagged

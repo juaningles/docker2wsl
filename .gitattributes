@@ -1,0 +1,2 @@
+# Files that run inside Linux as-is (not rendered like straps) must keep LF endings.
+lib/c2w-manifest text eol=lf

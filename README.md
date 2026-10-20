@@ -130,6 +130,7 @@ container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
 | `k8s-tools` | Installs kubectl (latest stable), kubelogin, Helm 4 and yq into `/usr/local/bin` (amd64/arm64, apt or apk); skips any already on PATH |
 | `data-tools` | Installs jq, miller (`mlr`), make, unzip and curl (apt or apk) |
 | `azure-cli` | Installs the Azure CLI (`az`) from Microsoft's apt repository (Debian/Ubuntu only); skipped if present |
+| `motd` | Shows the build summary (`c2w-manifest --short`) at every zsh login, motd style, through `/etc/zsh/zlogin`. Run after `zsh`. Silence per user with `touch ~/.hushlogin` |
 
 The `k8s-tools`, `data-tools` and `azure-cli` files use no `%C2W_*%` variables, so they also work on a distro you already have: `sudo bash bootstraps/k8s-tools`.
 
@@ -171,7 +172,7 @@ A full developer distro:
 
 ```cmd
 container2wsl.bat ubuntu:24.04 -n dev -u alice ^
-  -b sudo -b systemd-enable -b devtools -b zsh -b k8s-tools -b data-tools -b azure-cli ^
+  -b sudo -b systemd-enable -b devtools -b zsh -b motd -b k8s-tools -b data-tools -b azure-cli ^
   -p powerlevel10k -p uv -p devtools-shell
 ```
 
@@ -202,6 +203,21 @@ It is [JSON Lines](https://jsonlines.org/): one record per line, appended as the
 | `create` | once the distro exists | the command line as typed and its working folder; the image as requested, its image ID (`sha256:...`), registry digests (`repo@sha256:...`), tags, OS/arch, build date, size and whether this run pulled it; distro name, user, install path and `/etc/os-release` name; requested straps (as typed and resolved); container2wsl version and git commit; Windows host, build, WSL version and container engine |
 | `strap` | after each bootstrap/poststrap, pass or fail | kind, order, name as requested, resolved path, sha256 and git commit (with a dirty flag) of the strap file, sha256 of the rendered script and where it was saved, user it ran as, command count, duration, `ok`/`failed` |
 | `complete` | at the end | `ok` or `failed`, the failed step (for example `poststrap 2: uv`), total duration |
+
+Inside the distro, `c2w-manifest` prints a readable report. It is installed to `/usr/local/bin` with the manifest and needs only `sh` and `awk`:
+
+```text
+$ c2w-manifest --short
+container2wsl: zdevnode from juaningles/devnode:noble @sha256:68ee22004a91, built 2026-10-20 14:58 UTC, ok in 25m31s
+  straps: sudo systemd-enable zsh homebrew k8s-tools | powerlevel10k uv devtools-shell (8 ok)
+
+$ c2w-manifest            # long: image id and digests, command line, host, one row per strap
+$ c2w-manifest -f /mnt/c/wsl-storage/other/container2wsl-manifest.jsonl   # any manifest file
+```
+
+Add `-b motd` (after `-b zsh`) to show the short form at every zsh login.
+
+With `jq` installed you can query the raw records:
 
 ```bash
 cat /etc/container2wsl/manifest.jsonl | jq .                       # everything

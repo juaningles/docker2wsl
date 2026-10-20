@@ -1,0 +1,172 @@
+#!/bin/sh
+# c2w-manifest - summarize this distro's container2wsl build manifest.
+#   c2w-manifest              long report (default)
+#   c2w-manifest -s|--short   two-line summary (the login header uses this)
+#   c2w-manifest -f FILE      read another manifest, e.g. the Windows copy
+# Installed by container2wsl to /usr/local/bin. Needs only sh and awk.
+MODE=long
+FILE=/etc/container2wsl/manifest.jsonl
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|--short) MODE=short ;;
+    -l|--long)  MODE=long ;;
+    -f|--file)  FILE="$2"; shift ;;
+    -h|--help)  sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "c2w-manifest: unknown option: $1 (try --help)" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [ ! -r "$FILE" ]; then
+  [ "$MODE" = short ] && exit 0      # quiet in the login header
+  echo "c2w-manifest: no manifest at $FILE" >&2
+  echo "  (distro not built by container2wsl, or built without its lib/manifest.ps1)" >&2
+  exit 1
+fi
+
+exec awk -v mode="$MODE" '
+# ---- minimal JSON reader: flattens one line into J["a.b[0].c"] = value --------
+function ws() { while (p <= n && index(" \t\r\n", substr(s, p, 1))) p++ }
+function str(   out, c, h) {
+  p++; out = ""
+  while (p <= n) {
+    c = substr(s, p, 1)
+    if (c == "\"") { p++; return out }
+    if (c == "\\") {
+      p++; c = substr(s, p, 1)
+      if (c == "n") out = out " "
+      else if (c == "t") out = out " "
+      else if (c == "u") {
+        h = tolower(substr(s, p + 1, 4)); p += 4
+        if (h == "0026") out = out "&"; else if (h == "0027") out = out "\047"
+        else if (h == "003c") out = out "<"; else if (h == "003e") out = out ">"
+        else out = out "?"
+      } else out = out c
+      p++; continue
+    }
+    out = out c; p++
+  }
+  return out
+}
+function val(path,   c, k, i) {
+  ws(); c = substr(s, p, 1)
+  if (c == "{") {
+    p++; ws(); if (substr(s, p, 1) == "}") { p++; return }
+    while (p <= n) {
+      ws(); k = str(); ws(); p++
+      val(path == "" ? k : (path "." k))
+      ws(); c = substr(s, p, 1); p++
+      if (c == "}") return
+    }
+    return
+  }
+  if (c == "[") {
+    p++; ws(); i = 0
+    if (substr(s, p, 1) == "]") { p++; J[path "#"] = 0; return }
+    while (p <= n) {
+      val(path "[" i "]"); i++
+      ws(); c = substr(s, p, 1); p++
+      if (c == "]") { J[path "#"] = i; return }
+    }
+    return
+  }
+  if (c == "\"") { J[path] = str(); return }
+  k = p
+  while (p <= n && !index(",}] \t\r\n", substr(s, p, 1))) p++
+  J[path] = substr(s, k, p - k)
+}
+function v(k,   x) { x = (k in J) ? J[k] : ""; return (x == "null") ? "" : x }
+function cnt(k) { return (k "#") in J ? J[k "#"] + 0 : 0 }
+
+# ---- formatting helpers ----------------------------------------------------------
+function base(x) { sub(/.*[\/\\]/, "", x); return x }
+function sha12(x) { sub(/^.*sha256:/, "", x); return substr(x, 1, 12) }
+function when(t) { if (t == "") return "?"; sub(/T/, " ", t); return substr(t, 1, 16) " UTC" }
+function dur(x,   t) {
+  if (x == "") return "?"
+  t = int(x + 0.5)
+  if (t >= 3600) return sprintf("%dh%02dm", int(t / 3600), int((t % 3600) / 60))
+  if (t >= 60) return sprintf("%dm%02ds", int(t / 60), t % 60)
+  return x "s"
+}
+function human(b) {
+  if (b == "") return ""
+  b = b + 0   # JSON text compares as a string otherwise
+  if (b >= 1073741824) return sprintf("%.1f GB", b / 1073741824)
+  if (b >= 1048576) return sprintf("%.0f MB", b / 1048576)
+  return b " B"
+}
+function yn(x) { return x == "true" ? "yes" : (x == "false" ? "no" : x) }
+function dflt(a, b) { return a != "" ? a : b }
+
+# ---- collect records -------------------------------------------------------------------
+{
+  split("", J); s = $0; n = length(s); p = 1
+  if (n == 0) next
+  val("")
+  ev = v("event")
+  if (ev == "create") {
+    HAVE = 1
+    name = v("distro.name"); user = v("distro.user"); dos = v("distro.os"); ipath = v("distro.install_path")
+    replaced = v("distro.replaced_existing")
+    ctime = v("time"); cmd = v("command.line"); cwd = v("command.cwd")
+    img = v("image.requested"); iid = v("image.id"); pulled = v("image.pulled")
+    ios = v("image.os"); iarch = v("image.arch"); icreated = v("image.created"); isize = v("image.size")
+    nd = cnt("image.digests"); for (i = 0; i < nd; i++) dig[i] = v("image.digests[" i "]")
+    tver = v("tool.version"); tgit = v("tool.git.commit"); tdirty = v("tool.git.dirty")
+    hcomp = v("host.computer"); huser = v("host.windows_user"); hwin = v("host.windows")
+    hwsl = v("host.wsl"); heng = v("host.engine")
+    nb = cnt("straps.bootstrap"); np = cnt("straps.poststrap")
+    for (i = 0; i < nb; i++) reqb[i] = base(v("straps.bootstrap[" i "].requested"))
+    for (i = 0; i < np; i++) reqp[i] = base(v("straps.poststrap[" i "].requested"))
+  } else if (ev == "strap") {
+    ns++
+    sk[ns] = v("kind"); sn[ns] = base(v("requested")); sr[ns] = v("result"); sd[ns] = v("duration_s")
+    sa[ns] = v("run_as"); ssha[ns] = substr(v("sha256"), 1, 12); sgit[ns] = v("git.commit")
+    sdirty[ns] = v("git.dirty"); sc[ns] = v("commands"); scopy[ns] = v("rendered_copy")
+    if (sr[ns] == "ok") nok++; else nfail++
+  } else if (ev == "complete") {
+    done = 1; result = v("result"); failed = v("failed"); total = v("duration_s"); ftime = v("time")
+  }
+}
+
+END {
+  if (!HAVE) { if (mode != "short") print "c2w-manifest: no create record in the manifest"; exit (mode == "short") ? 0 : 1 }
+  ref = (nd > 0) ? base(dig[0]) : (iid != "" ? "id " sha12(iid) : "")
+  if (ref ~ /@sha256:/) { split(ref, rr, "@sha256:"); ref = "@sha256:" substr(rr[2], 1, 12) }
+  status = !done ? "build incomplete" : (result == "ok" ? "ok in " dur(total) : "FAILED at " failed " after " dur(total))
+
+  if (mode == "short") {
+    printf "container2wsl: %s from %s%s, built %s, %s\n", name, img, (ref != "" ? " " ref : ""), when(ctime), status
+    line = ""
+    for (i = 0; i < nb; i++) line = line " " reqb[i]
+    if (np > 0) { line = line " |"; for (i = 0; i < np; i++) line = line " " reqp[i] }
+    if (nb + np > 0) printf "  straps:%s (%d ok%s)\n", line, nok, (nfail ? ", " nfail " failed" : "")
+    exit 0
+  }
+
+  printf "Distro    %s  (user %s)%s\n", name, user, (dos != "" ? "  " dos : "")
+  printf "Built     %s  %s%s\n", when(ctime), status, (replaced == "true" ? "  (replaced an existing distro)" : "")
+  printf "Stored    %s\n", dflt(ipath, "?")
+  printf "Command   %s\n", cmd
+  if (cwd != "") printf "          (run in %s)\n", cwd
+  printf "Image     %s  (pulled this build: %s)\n", img, yn(pulled)
+  if (iid != "") printf "  id      %s\n", iid
+  for (i = 0; i < nd; i++) printf "  digest  %s\n", dig[i]
+  if (ios != "" || icreated != "") printf "  info    %s/%s  created %s  %s\n", dflt(ios, "?"), dflt(iarch, "?"), when(icreated), human(isize)
+  printf "Tool      container2wsl %s%s\n", tver, (tgit != "" ? "  (git " tgit (tdirty == "true" ? ", uncommitted changes" : "") ")" : "")
+  printf "Host      %s (%s)  Windows %s%s%s\n", hcomp, huser, hwin, (hwsl != "" ? "  " hwsl : ""), (heng != "" ? "  " heng : "")
+  if (ns == 0 && nb + np == 0) { print "Straps    none"; exit 0 }
+  printf "Straps    %d requested, %d ran: %d ok, %d failed\n", nb + np, ns, nok, nfail
+  printf "  %-2s %-9s %-18s %-6s %7s %-8s %-12s %s\n", "#", "kind", "name", "result", "time", "as", "sha256", "git"
+  for (i = 1; i <= ns; i++)
+    printf "  %-2d %-9s %-18s %-6s %7s %-8s %-12s %s\n", i, sk[i], sn[i], sr[i], dur(sd[i]), sa[i], ssha[i], dflt(sgit[i], "-") (sdirty[i] == "true" ? "*" : "")
+  if (nb + np > ns) {
+    line = ""
+    for (i = ns; i < nb; i++) line = line " " reqb[i]
+    for (i = (ns > nb ? ns - nb : 0); i < np; i++) line = line " " reqp[i]
+    printf "  not run:%s\n", line
+  }
+  if (ns > 0) printf "Scripts   exact scripts that ran: %s (root only)\n", substr(scopy[1], 1, length(scopy[1]) - length(base(scopy[1])) - 1)
+  for (i = 1; i <= ns; i++) if (sdirty[i] == "true") { print "          * strap file had uncommitted changes in its repo"; break }
+}
+' "$FILE"

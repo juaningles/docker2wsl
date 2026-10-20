@@ -1,0 +1,8 @@
+# Show the container2wsl build summary (c2w-manifest --short) at every zsh login,
+# motd style. Hooks /etc/zsh/zlogin, which zsh reads for login shells (wsl -d NAME starts one).
+# Silence it per user with: touch ~/.hushlogin   Full report any time: c2w-manifest
+# Run after bootstrap zsh. c2w-manifest itself is installed by container2wsl with the manifest.
+mkdir -p /etc/zsh
+touch /etc/zsh/zlogin
+grep -q c2w-manifest /etc/zsh/zlogin || printf '\n# container2wsl build summary, motd style. Silence with: touch ~/.hushlogin\n[[ -o interactive && ! -e ~/.hushlogin && -x /usr/local/bin/c2w-manifest ]] && /usr/local/bin/c2w-manifest --short\n' >> /etc/zsh/zlogin
+tail -2 /etc/zsh/zlogin

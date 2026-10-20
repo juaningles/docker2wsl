@@ -49,7 +49,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (265 assertions)
+tests\run_tests.bat                        # run all (270 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -73,6 +73,7 @@ tests\run_tests.bat --force                # skip collision pre-check
 container2wsl.bat            # main script (works alone)
 lib/
   manifest.ps1               # optional: build manifest (JSON Lines) writer
+  c2w-manifest               # sh+awk report, installed in the distro as /usr/local/bin/c2w-manifest (LF only, see .gitattributes)
 bootstraps/
   devtools                   # git, curl, build-essential, jq, etc.
   homebrew                   # Linuxbrew + dependencies + prefix ownership setup
@@ -82,6 +83,7 @@ bootstraps/
   k8s-tools                  # kubectl, kubelogin, helm 4, yq -> /usr/local/bin (apt/apk)
   data-tools                 # jq, miller, make, unzip, curl (apt/apk)
   azure-cli                  # az via Microsoft's apt repo
+  motd                       # zsh login header: c2w-manifest --short via /etc/zsh/zlogin
 poststraps/
   powerlevel10k             # installs Oh My Zsh if needed, theme, and plugins
   brew-python               # brew python (superseded by uv)
