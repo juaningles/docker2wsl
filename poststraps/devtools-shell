@@ -1,0 +1,19 @@
+# Clone devtools (shell setup + CLI tools) to ~/devtools and run its install.sh:
+# links ~/.bashrc, hooks ~/.zshrc if zsh is installed, puts devtools bin/ on PATH.
+# Source, first match wins:
+#   1. %C2W_DEVTOOLS_REPO%           (set it in the Windows shell before running container2wsl)
+#   2. /mnt/c/code/devtools          (the Windows clone; it is the sync origin for WSL clones)
+#   3. https://github.com/juaningles/devtools.git
+# Needs git (bootstrap 'devtools'). Tools are NOT installed here: use bootstraps k8s-tools,
+# data-tools, azure-cli and poststrap uv.
+if ! command -v git >/dev/null 2>&1; then echo "[ERROR] git is not installed. Run bootstrap 'devtools' first."; exit 1; fi
+REPO=%C2W_DEVTOOLS_REPO%
+case $REPO in *C2W_DEVTOOLS_REPO*) REPO= ;; esac
+if [ -z "$REPO" ] && [ -d /mnt/c/code/devtools/.git ]; then REPO=/mnt/c/code/devtools; fi
+if [ -z "$REPO" ]; then REPO=https://github.com/juaningles/devtools.git; fi
+echo devtools-shell: source $REPO
+# /mnt/c files are not owned by this user, so git refuses them as dubious ownership. Trust the
+# source in the global config (not -c), because later pulls and devtools-sync need it too.
+if [ -d $REPO/.git ]; then for D in $REPO $REPO/.git; do git config --global --get-all safe.directory | grep -qxF $D || git config --global --add safe.directory $D; done; fi
+if [ -d $HOME/devtools/.git ]; then git -C $HOME/devtools pull --ff-only; else git clone $REPO $HOME/devtools; fi
+bash $HOME/devtools/install.sh

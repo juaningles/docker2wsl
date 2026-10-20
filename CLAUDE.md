@@ -3,7 +3,9 @@
 ## Project Overview
 
 Windows batch script that creates a WSL distribution from any Docker image.
-Single file (`container2wsl.bat`), no dependencies beyond Docker and WSL.
+`container2wsl.bat` works on its own, with no dependencies beyond Docker and WSL.
+The optional `lib\manifest.ps1` next to it adds the build manifest; keep the
+script working (banner `Manifest : off`) when that file is absent.
 
 ## Architecture
 
@@ -14,6 +16,15 @@ The main script runs 4-6 sequential steps via `call :subroutine` labels:
 4. `wsl_configure_user` - create user, write `/etc/wsl.conf`, restart distro
 5. `wsl_bootstrap` (optional) - run bootstrap file commands as root
 6. `wsl_poststrap` (optional) - run poststrap file commands as user
+
+Manifest (`:manifest`, `:manifest_strap`, `:manifest_complete`, plus `lib\manifest.ps1`):
+`create` is written after step 4, a `strap` record after each strap (pass or fail), and
+`complete` at the end or when a strap fails. The batch side passes **all** data to
+PowerShell in environment variables (never arguments), the helper appends to the
+Windows copy in the install dir, and the batch side copies the whole file into the
+distro with `install -D`. Manifest problems print `[WARN]` and never fail the build.
+PowerShell 5.1 traps in the helper: commands with no output give AutomationNull
+(serialised as `{}`), and returning a 1-item array unrolls it. See `Quiet` and `,$list`.
 
 ## Critical WSL Quirks
 
@@ -29,14 +40,16 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 
 - **`)` in echo inside if/else blocks** closes the block early. Use delayed expansion variables (`!var!`) for any content that might contain `)`, or restructure to avoid if/else blocks entirely (use `goto` or flat `if` chains).
 - **Calling a `.bat` without `call`** transfers control permanently. Always `call script.bat`.
+- **`shift` also shifts `%0`**, so after argument parsing `%~dp0` in the main flow points at an argument, not the script. Use `%C2W_SCRIPT_DIR%`, captured at the top of the script. Inside a `call :label` subroutine `%~dp0` is fine. Mocked tests run from the repo folder can hide this; test_06 runs from `%TEMP%`.
 - **`goto :label 2>nul || (fallback)`** does not work reliably. Use explicit `if` chains.
 - **`>` in echo** is parsed as redirect. Don't use `>` as a display character in batch echo statements.
 - **Unicode characters** (`---`, checkmarks, bullets) don't survive CMD's codepage. Use ASCII only for display.
+- **Strap lines are re-parsed by CMD** in the command display loop (`call set "_BS_EXPANDED=!_BS_LINE!"`). The quoting flips, so `>`, `<`, `|`, `&` inside a strap's double quotes become live CMD operators and can create stray files. `%*` expands to the subroutine's args. Keep those characters outside double quotes. test_04 #21 checks the built-ins for stray files.
 
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (178 assertions)
+tests\run_tests.bat                        # run all (265 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -50,21 +63,32 @@ tests\run_tests.bat --force                # skip collision pre-check
 - `test_02_docker` and `test_03_wsl` use mocks
 - `test_04_bootstrap` tests bootstrap execution (mocked)
 - `test_05_poststrap` tests poststrap execution (mocked)
+- `test_06_manifest` tests the build manifest (mocked; `manifest_summary.ps1` parses the JSON Lines)
 - Assertion helpers use `setlocal enabledelayedexpansion` + flat `if/goto` to avoid block-parsing bugs
 - ANSI colors in output: green PASS, red FAIL, yellow test headers, cyan file names
 
 ## File Layout
 
 ```
-container2wsl.bat            # main script (the only file users need)
+container2wsl.bat            # main script (works alone)
+lib/
+  manifest.ps1               # optional: build manifest (JSON Lines) writer
 bootstraps/
   devtools                   # git, curl, build-essential, jq, etc.
   homebrew                   # Linuxbrew + dependencies + prefix ownership setup
   sudo                       # install sudo + passwordless sudoers entry
   systemd-enable             # enable systemd in wsl.conf
   zsh                        # zsh + Oh My Zsh
+  k8s-tools                  # kubectl, kubelogin, helm 4, yq -> /usr/local/bin (apt/apk)
+  data-tools                 # jq, miller, make, unzip, curl (apt/apk)
+  azure-cli                  # az via Microsoft's apt repo
 poststraps/
   powerlevel10k             # installs Oh My Zsh if needed, theme, and plugins
+  brew-python               # brew python (superseded by uv)
+  uv                        # uv + uv-managed default python (C2W_UV_PYTHON pins)
+  devtools-shell            # clone devtools to ~/devtools + install.sh (C2W_DEVTOOLS_REPO)
+  claude                    # Claude Code, native installer (C2W_CLAUDE_VERSION)
+  databricks-ug             # Databricks Unity Gateway (ug, formerly ucode) + Databricks CLI
 tests/
   run_tests.bat              # test runner with --html, --force, pre-flight checks
   helpers.bat                # assertion library (10 assertion types)
@@ -73,6 +97,8 @@ tests/
   test_03_wsl.bat            # wsl import + user config tests (mocked)
   test_04_bootstrap.bat      # bootstrap feature tests (mocked)
   test_05_poststrap.bat      # poststrap feature tests (mocked)
+  test_06_manifest.bat       # build manifest tests (mocked)
+  manifest_summary.ps1       # parses a manifest into key=value lines for asserts
   mocks/
     docker.bat               # mock docker (controlled via C2W_MOCK_* vars)
     wsl.bat                  # mock wsl (controlled via C2W_MOCK_* vars)
