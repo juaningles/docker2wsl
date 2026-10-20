@@ -360,6 +360,7 @@ call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "databricks
 call "%HELPERS%" assert_output_contains "%OUT%" "databricks/setup-cli" "databricks-ug: Databricks CLI installer shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "tool uninstall ucode" "databricks-ug: old ucode migration shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "git+https://github.com/databricks/unity-gateway" "databricks-ug: unity-gateway install shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "git+https://github.com/databricks/ucode" "databricks-ug: legacy ucode URL fallback shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "ug --version" "databricks-ug: version check shown"
 
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"

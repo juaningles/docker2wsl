@@ -13,8 +13,11 @@ if ! command -v databricks >/dev/null 2>&1; then
     sudo -n sh /tmp/databricks-setup-cli.sh
     rm -f /tmp/databricks-setup-cli.sh
 fi
+# Install: the recommended unity-gateway URL first, the legacy ucode URL if that fails.
+# An old ucode tool is removed first because both provide the ug and ucode commands.
 if $UV tool list 2>/dev/null | grep -q '^ucode '; then $UV tool uninstall ucode; fi
-if $UV tool list 2>/dev/null | grep -q '^unity-gateway '; then $UV tool upgrade unity-gateway; else $UV tool install git+https://github.com/databricks/unity-gateway; fi
+if $UV tool list 2>/dev/null | grep -q '^unity-gateway '; then $UV tool upgrade unity-gateway || $UV tool install --force git+https://github.com/databricks/unity-gateway; fi
+if ! $UV tool list 2>/dev/null | grep -qE '^(unity-gateway|ucode) '; then $UV tool install git+https://github.com/databricks/unity-gateway || { echo "[WARN] unity-gateway install failed, trying the legacy ucode URL"; $UV tool install git+https://github.com/databricks/ucode; }; fi
 $HOME/.local/bin/ug --help >/dev/null
 $HOME/.local/bin/ug --version
 databricks --version
