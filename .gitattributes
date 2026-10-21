@@ -1,2 +1,6 @@
 # Files that run inside Linux as-is (not rendered like straps) must keep LF endings.
 lib/c2w-manifest text eol=lf
+# Straps are also run directly on an existing distro (sudo bash bootstraps/k8s-tools): LF, or bash
+# fails on the CRs. container2wsl strips CRs when it renders them, so builds work either way.
+bootstraps/* text eol=lf
+poststraps/* text eol=lf
