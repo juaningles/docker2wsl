@@ -250,6 +250,7 @@ call "%HELPERS%" assert_exit_zero "%_RC%" "systemd-enable: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "systemd-enable: bootstrap complete message"
 call "%HELPERS%" assert_output_contains "%OUT%" "systemd=true" "systemd-enable: systemd=true shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "wsl.conf" "systemd-enable: wsl.conf referenced"
+call "%HELPERS%" assert_output_contains "%OUT%" "/etc/binfmt.d/WSLInterop.conf" "systemd-enable: WSLInterop binfmt entry kept across systemd boots"
 
 :: ============================================================
 ::  15. sudo built-in bootstrap (ubuntu:latest)
@@ -310,6 +311,8 @@ call "%HELPERS%" assert_output_contains "%OUT%" "kubelogin-linux-" "k8s-tools: k
 call "%HELPERS%" assert_output_contains "%OUT%" "get-helm-4" "k8s-tools: helm 4 installer shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "mikefarah/yq" "k8s-tools: yq download shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "/usr/local/bin" "k8s-tools: installs into /usr/local/bin"
+call "%HELPERS%" assert_output_contains "%OUT%" "dnsutils" "k8s-tools: nslookup via dnsutils (apt)"
+call "%HELPERS%" assert_output_contains "%OUT%" "bind-tools" "k8s-tools: nslookup via bind-tools (apk)"
 
 :: ============================================================
 ::  19. data-tools built-in bootstrap
@@ -338,6 +341,7 @@ call "%HELPERS%" assert_exit_zero "%_RC%" "azure-cli: exit 0"
 call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap complete" "azure-cli: bootstrap complete message"
 call "%HELPERS%" assert_output_contains "%OUT%" "aka.ms/InstallAzureCLIDeb" "azure-cli: Microsoft installer shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "az version" "azure-cli: version check shown"
+call "%HELPERS%" assert_output_contains "%OUT%" "lx() {" "azure-cli: install check ignores a Windows az on the WSL PATH (lx helper)"
 
 :: ============================================================
 ::  20b. motd built-in bootstrap

@@ -1,25 +1,28 @@
-# Install kubectl, kubelogin, helm and yq into /usr/local/bin (amd64 or arm64).
-# Each tool is skipped if it is already on PATH, so re-running is safe.
+# Install kubectl, kubelogin, helm and yq into /usr/local/bin (amd64 or arm64), plus nslookup/dig
+# (dnsutils on apt, bind-tools on apk) for the DNS checks in devtools' k8stool.
+# Each tool is skipped if a Linux one is already on PATH (Windows tools on WSL's PATH do not
+# count), so re-running is safe.
 # Also runnable on an existing distro: sudo bash bootstraps/k8s-tools
-if command -v apt-get >/dev/null 2>&1; then apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates unzip openssl; fi
-if command -v apk >/dev/null 2>&1; then apk add --no-cache curl ca-certificates unzip openssl bash; fi
+lx() { case $(command -v $1 2>/dev/null) in ''|/mnt/*) return 1 ;; esac; }   # on PATH as a Linux binary, not via the Windows PATH (/mnt/...)
+if command -v apt-get >/dev/null 2>&1; then apt-get update -qq; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates unzip openssl dnsutils; fi
+if command -v apk >/dev/null 2>&1; then apk add --no-cache curl ca-certificates unzip openssl bash bind-tools; fi
 case $(uname -m) in x86_64) ARCH=amd64 ;; aarch64|arm64) ARCH=arm64 ;; *) echo "[ERROR] unsupported architecture: $(uname -m)"; exit 1 ;; esac
 TMPD=$(mktemp -d)
-if ! command -v kubectl >/dev/null 2>&1; then
+if ! lx kubectl; then
     KVER=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
     curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/$KVER/bin/linux/$ARCH/kubectl
     chmod 755 /usr/local/bin/kubectl
 fi
-if ! command -v kubelogin >/dev/null 2>&1; then
+if ! lx kubelogin; then
     curl -fsSLo $TMPD/kubelogin.zip https://github.com/Azure/kubelogin/releases/latest/download/kubelogin-linux-$ARCH.zip
     unzip -oq $TMPD/kubelogin.zip -d $TMPD
     install -m 755 $TMPD/bin/linux_$ARCH/kubelogin /usr/local/bin/kubelogin
 fi
-if ! command -v helm >/dev/null 2>&1; then
+if ! lx helm; then
     curl -fsSLo $TMPD/get-helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4
     HELM_INSTALL_DIR=/usr/local/bin USE_SUDO=false bash $TMPD/get-helm.sh
 fi
-if ! command -v yq >/dev/null 2>&1; then
+if ! lx yq; then
     curl -fsSLo /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$ARCH
     chmod 755 /usr/local/bin/yq
 fi

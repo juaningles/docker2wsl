@@ -55,6 +55,28 @@ IFS=:; for S in $SOURCES; do
         if [ "$ACL" = off ]; then echo "[WARN] ssh-keys: Windows ACL check skipped for $S (C2W_SSH_ACL_CHECK=off)"
         else
             [ -n "$PS" ] && [ -n "$CHECK" ] || { echo "[ERROR] ssh-keys: cannot verify Windows ACLs (powershell.exe not reachable or lib/ssh-source-check.ps1 missing). Refusing. Set C2W_SSH_ACL_CHECK=off to override."; exit 1; }
+            # interop can be down although powershell.exe exists ("Exec format error"): the WSLInterop
+            # binfmt entry is shared by every distro and something outside this build can clear it.
+            # Root in any distro can re-register it (same line WSL itself uses), so repair and go on.
+            if [ -z "$PSOK" ]; then
+                if "$PS" -NoProfile -Command "exit 0" >/dev/null 2>&1; then PSOK=1
+                else
+                    REG=':WSLInterop:M::MZ::/init:P'
+                    if [ ! -e /proc/sys/fs/binfmt_misc/WSLInterop ]; then
+                        if [ "$(id -u)" -eq 0 ]; then echo "$REG" > /proc/sys/fs/binfmt_misc/register 2>/dev/null || true
+                        elif sudo -n true 2>/dev/null; then echo "$REG" | sudo -n tee /proc/sys/fs/binfmt_misc/register >/dev/null 2>&1 || true
+                        fi
+                    fi
+                    if "$PS" -NoProfile -Command "exit 0" >/dev/null 2>&1; then
+                        PSOK=1; echo "[WARN] ssh-keys: WSL interop was down (no WSLInterop binfmt entry); re-registered it and continued."
+                    else
+                        echo "[ERROR] ssh-keys: this distro cannot start Windows programs, so the Windows ACL check cannot run."
+                        echo "        WSL interop is down: /proc/sys/fs/binfmt_misc/WSLInterop is $( [ -e /proc/sys/fs/binfmt_misc/WSLInterop ] && echo present || echo missing ), and re-registering it did not help"
+                        echo "        (that needs root: build with -b sudo). Try wsl --shutdown, then rebuild with --force. Or skip the check: set C2W_SSH_ACL_CHECK=off."
+                        exit 1
+                    fi
+                fi
+            fi
             # capture to a file (a pipeline's status would be tr's), inside an if: under set -e a
             # bare failing command would kill the script before the refusal is printed
             if "$PS" -NoProfile -ExecutionPolicy Bypass -File "$CHECK" -Path "$(wslpath -w "$S")" > "$HOME/.c2w-acl.tmp" 2>&1; then RC=0; else RC=1; fi

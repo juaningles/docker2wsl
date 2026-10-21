@@ -46,6 +46,8 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 - **Private overlay folders**: `--private` → `C2W_PRIVATE_DIRS` (the caller's value is saved as `C2W_PRIVATE_DIRS_IN` on line 1 because the script rebuilds the variable) → siblings of `%C2W_SCRIPT_DIR%..` with a `.devtools-overlay` marker. `:add_private` builds both the `;` Windows list and the `:` `/mnt` list; `:resolve_strap` searches them after the built-in folders; `:set_strap_dir` exposes the running strap's folder. Loop over the `;` list with `for %%d in ("!C2W_PRIVATE_DIRS:;=" "!")`, which keeps paths with spaces whole.
 - **Poststraps run as a normal user**: on Alpine neither the user's PATH nor sudo's `secure_path` includes `/sbin`, so call `/sbin/apk` by full path; and `~/.local/bin` is not on PATH in a bare login shell, so anything you add to `~/.profile` must reference `$HOME/.local/bin/<tool>` explicitly.
 - **drvfs owner mapping**: a Windows file that only its owner may read appears under `/mnt` as mode 600 owned by uid 1000, whatever the mount's `uid=` says. A distro user with another uid (the image's own first user takes 1000) gets `Permission denied` although Windows would allow it; root does not. ssh-keys reads such files through `sudo -n cat` (see `rd`). Also, inside a strap `set -e` kills a bare failing command before `RC=$?` runs: wrap it in `if`.
+- **Strap text: the script that runs vs the listing.** The `.sh` that runs is rendered by PowerShell `ExpandEnvironmentVariables`: only `%NAME%` of a defined variable expands, so write a literal `%` as `%` (`stat -c %a`, `printf '%s'`), never `%%` (it stays `%%`). The `[N]` listing and `--dry-run` echo lines through cmd (`call set`), which drops `!` and lone `%`, eats from a lone `!` to a later `:` on the line (`if ! lx az; then curl https://...` lists as `if //...`), and cuts a line at nested double quotes followed by `2>` or `|`; that is cosmetic, but tests grep the listing, so keep strap lines free of `"..."$x"..." 2>` patterns where you can.
+- **Windows PATH in WSL**: WSL appends the Windows PATH, and the Windows Azure CLI ships an extensionless bash wrapper (`.../CLI2/wbin/az`), so `command -v az` succeeds in a distro with no Linux az. Install checks use `lx NAME` (defined at the top of azure-cli, k8s-tools, databricks-ug), which ignores `/mnt/*` hits.
 - **Strap scripts run under `set -e`**, so a trailing `while` loop or `cmd && other` whose last evaluation is false aborts the strap silently. Use `if`; and a pipeline's status is the last command's, so capture `powershell.exe` output to a file when its exit code matters (see ssh-keys).
 - **`shift` also shifts `%0`**, so after argument parsing `%~dp0` in the main flow points at an argument, not the script. Use `%C2W_SCRIPT_DIR%`, captured at the top of the script. Inside a `call :label` subroutine `%~dp0` is fine. Mocked tests run from the repo folder can hide this; test_06 runs from `%TEMP%`.
 - **`goto :label 2>nul || (fallback)`** does not work reliably. Use explicit `if` chains.
@@ -86,9 +88,9 @@ bootstraps/
   devtools                   # git, curl, build-essential, jq, etc.
   homebrew                   # Linuxbrew + dependencies + prefix ownership setup
   sudo                       # install sudo + passwordless sudoers entry
-  systemd-enable             # enable systemd in wsl.conf
+  systemd-enable             # enable systemd in wsl.conf + /etc/binfmt.d/WSLInterop.conf (keeps interop alive)
   zsh                        # zsh + Oh My Zsh
-  k8s-tools                  # kubectl, kubelogin, helm 4, yq -> /usr/local/bin (apt/apk)
+  k8s-tools                  # kubectl, kubelogin, helm 4, yq -> /usr/local/bin (apt/apk), + dnsutils/bind-tools
   data-tools                 # jq, miller, make, unzip, curl (apt/apk)
   azure-cli                  # az via Microsoft's apt repo
   motd                       # zsh login header: c2w-manifest --short via /etc/zsh/zlogin

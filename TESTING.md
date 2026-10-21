@@ -94,7 +94,7 @@ Both mocks are active. The Docker mock always succeeds so only bootstrap behavio
 | Variables in dry-run | `--dry-run` + file with `%C2W_USER%` | Variables expanded in listed commands |
 | devtools built-in bootstrap | `bootstraps\devtools` path | Exit 0, apt-get install and jq shown |
 | zsh built-in bootstrap | `bootstraps\zsh` path | Exit 0, chsh shown, C2W_USER expanded |
-| systemd-enable built-in bootstrap | `bootstraps\systemd-enable` path | Exit 0, systemd=true shown |
+| systemd-enable built-in bootstrap | `bootstraps\systemd-enable` path | Exit 0, systemd=true and WSLInterop.conf shown |
 | sudo built-in bootstrap | `bootstraps\sudo` path | Exit 0, NOPASSWD shown, C2W_USER expanded |
 | Bare name resolves and executes | `-b sudo` (no path) | Resolves to script dir, exit 0, commands run |
 | Bare name resolves from different CWD | `pushd %TEMP%` + `-b systemd-enable` | Resolves via script dir even when CWD differs |
@@ -123,11 +123,11 @@ Poststrap runs commands as the created user (not root), unlike bootstrap.
 | Homebrew built-in bootstrap | `bootstraps\homebrew` path | Exit 0, build-essential, Linuxbrew prefix ownership fix, and Homebrew shown |
 | uv, devtools-shell, claude, databricks-ug | built-in poststraps (`-p` by name) | Installer URLs shown; `C2W_UV_PYTHON`, `C2W_DEVTOOLS_REPO`, `C2W_CLAUDE_VERSION` expand; devtools-shell falls back to the `devtools` clone next to container2wsl; databricks-ug shows the legacy ucode URL fallback |
 | devtools-overlay | `--private DIR -p devtools-overlay` | `C2W_PRIVATE_DIRS_LX` expanded into the script, `install.sh --overlay`, `safe.directory` |
-| ssh-keys | `-p ssh-keys` | Windows ACL check wired in, Linux 700 / 600 mode checks, empty source folders skipped, `AddKeysToAgent yes` (lazy loading) |
+| ssh-keys | `-p ssh-keys` | Windows ACL check wired in, a clear message when WSL interop is down (after trying to re-register it), Linux 700 / 600 mode checks, empty source folders skipped, `AddKeysToAgent yes` (lazy loading) |
 | ssh-keys `C2W_SSH_SOURCE` | env var + `--dry-run` | the source folder is expanded into the script |
 | keychain | `-p keychain` | package install, upstream script fallback, `~/.keychain_default_keys` as the opt-in preload list |
 
-Also in `test_04_bootstrap.bat`: the new bootstraps (`k8s-tools`, `data-tools`, `azure-cli`, `motd`); bare names resolving from a private folder's `straps\` and `poststraps\`, with `C2W_STRAP_DIR_LX`, `C2W_SCRIPT_DIR_LX`, `C2W_PRIVATE_DIRS_LX` and `C2W_USERPROFILE_LX` expanded and a built-in strap winning over a private one of the same name; and a dry run of every built-in strap at once, from an empty folder, asserting that CMD's command display creates no stray files.
+Also in `test_04_bootstrap.bat`: the new bootstraps (`k8s-tools` with `dnsutils` / `bind-tools`, `data-tools`, `azure-cli` with the `lx` check that ignores a Windows `az` on the WSL PATH, `motd`); bare names resolving from a private folder's `straps\` and `poststraps\`, with `C2W_STRAP_DIR_LX`, `C2W_SCRIPT_DIR_LX`, `C2W_PRIVATE_DIRS_LX` and `C2W_USERPROFILE_LX` expanded and a built-in strap winning over a private one of the same name; and a dry run of every built-in strap at once, from an empty folder, asserting that CMD's command display creates no stray files.
 
 Also in `test_01_args.bat`: `--private` (folder with a space, missing folder is an error), `C2W_PRIVATE_DIRS` with two folders, auto-detection of a sibling with a `.devtools-overlay` marker from a copy of the script (an unmarked sibling is ignored), and the storage root default (`%SystemDrive%\wsl-storage`) and its `C2W_LOCATION` override.
 

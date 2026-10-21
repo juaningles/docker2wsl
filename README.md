@@ -132,13 +132,13 @@ container2wsl.bat ubuntu:22.04 -b sudo -b systemd-enable -b zsh
 | Name | What it does |
 |------|--------------|
 | `sudo` | Installs sudo, grants passwordless sudo to the created user |
-| `systemd-enable` | Enables systemd in `/etc/wsl.conf` |
+| `systemd-enable` | Enables systemd in `/etc/wsl.conf`, and writes `/etc/binfmt.d/WSLInterop.conf` so the distro's systemd does not clear Windows interop for every distro (microsoft/WSL#8843) |
 | `zsh` | Installs zsh, curl, git and Oh My Zsh for the created user |
 | `devtools` | Installs git, curl, wget, build-essential, jq, unzip/zip, openssh-client and other dev tools |
 | `homebrew` | Installs Homebrew (Linuxbrew), pre-creates the Linuxbrew prefix with the right ownership, and adds `brew shellenv` to `~/.profile` |
-| `k8s-tools` | Installs kubectl (latest stable), kubelogin, Helm 4 and yq into `/usr/local/bin` (amd64/arm64, apt or apk); skips any already on PATH |
+| `k8s-tools` | Installs kubectl (latest stable), kubelogin, Helm 4 and yq into `/usr/local/bin` (amd64/arm64, apt or apk); skips any already on PATH. Also `nslookup`/`dig` (`dnsutils` or `bind-tools`) |
 | `data-tools` | Installs jq, miller (`mlr`), make, unzip and curl (apt or apk) |
-| `azure-cli` | Installs the Azure CLI (`az`) from Microsoft's apt repository (Debian/Ubuntu only); skipped if present |
+| `azure-cli` | Installs the Azure CLI (`az`) from Microsoft's apt repository (Debian/Ubuntu only); skipped if a Linux `az` is present. The Windows `az` that WSL's PATH exposes does not count: it would write credentials to the Windows kubeconfig |
 | `motd` | Shows the build summary (`c2w-manifest --short`) at every zsh login, motd style, through `/etc/zsh/zlogin`. Run after `zsh`. Silence per user with `touch ~/.hushlogin` |
 
 The `k8s-tools`, `data-tools` and `azure-cli` files use no `%C2W_*%` variables, so they also work on a distro you already have: `sudo bash bootstraps/k8s-tools`.
