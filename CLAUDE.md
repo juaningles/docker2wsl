@@ -40,9 +40,12 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 
 - **`)` in echo inside if/else blocks** closes the block early. Use delayed expansion variables (`!var!`) for any content that might contain `)`, or restructure to avoid if/else blocks entirely (use `goto` or flat `if` chains).
 - **Calling a `.bat` without `call`** transfers control permanently. Always `call script.bat`.
+- **Temp files live in a per-run folder** `%C2W_TMP%` (`%TEMP%\c2w-run-<random>`, made in `:after_dryrun`, removed by `:manifest_complete`, swept after a day if a build died early). Never use a fixed `%TEMP%\c2w_*` name: two builds, or a build and the test suite, would overwrite each other's rendered scripts and stamps. The test runner points `TEMP` at its own folder.
+- **Strap names resolve to files only**: `if exist X` is also true for a folder, so every candidate in `:resolve_strap` also checks `if not exist X\`, and the runners refuse a folder. Run from `C:\code`, `-b devtools` once picked the devtools repo folder and "ran" 0 commands.
 - **Windows → WSL paths** go through `:win2lx` (lowercase drive letter → `/mnt/<d>/...`, no trailing `/`). Never write `C:/=/mnt/c/` substitutions; `%TEMP%` or the clone may live on another drive.
 - **Private overlay folders**: `--private` → `C2W_PRIVATE_DIRS` (the caller's value is saved as `C2W_PRIVATE_DIRS_IN` on line 1 because the script rebuilds the variable) → siblings of `%C2W_SCRIPT_DIR%..` with a `.devtools-overlay` marker. `:add_private` builds both the `;` Windows list and the `:` `/mnt` list; `:resolve_strap` searches them after the built-in folders; `:set_strap_dir` exposes the running strap's folder. Loop over the `;` list with `for %%d in ("!C2W_PRIVATE_DIRS:;=" "!")`, which keeps paths with spaces whole.
 - **Poststraps run as a normal user**: on Alpine neither the user's PATH nor sudo's `secure_path` includes `/sbin`, so call `/sbin/apk` by full path; and `~/.local/bin` is not on PATH in a bare login shell, so anything you add to `~/.profile` must reference `$HOME/.local/bin/<tool>` explicitly.
+- **drvfs owner mapping**: a Windows file that only its owner may read appears under `/mnt` as mode 600 owned by uid 1000, whatever the mount's `uid=` says. A distro user with another uid (the image's own first user takes 1000) gets `Permission denied` although Windows would allow it; root does not. ssh-keys reads such files through `sudo -n cat` (see `rd`). Also, inside a strap `set -e` kills a bare failing command before `RC=$?` runs: wrap it in `if`.
 - **Strap scripts run under `set -e`**, so a trailing `while` loop or `cmd && other` whose last evaluation is false aborts the strap silently. Use `if`; and a pipeline's status is the last command's, so capture `powershell.exe` output to a file when its exit code matters (see ssh-keys).
 - **`shift` also shifts `%0`**, so after argument parsing `%~dp0` in the main flow points at an argument, not the script. Use `%C2W_SCRIPT_DIR%`, captured at the top of the script. Inside a `call :label` subroutine `%~dp0` is fine. Mocked tests run from the repo folder can hide this; test_06 runs from `%TEMP%`.
 - **`goto :label 2>nul || (fallback)`** does not work reliably. Use explicit `if` chains.
@@ -53,7 +56,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (315 assertions)
+tests\run_tests.bat                        # run all (322 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -95,8 +98,8 @@ poststraps/
   uv                        # uv + uv-managed default python (C2W_UV_PYTHON pins)
   devtools-shell            # clone devtools to ~/devtools + install.sh (C2W_DEVTOOLS_REPO, else ../devtools)
   devtools-overlay          # clone each private overlay folder + devtools install.sh --overlay
-  ssh-keys                  # ~/.ssh from <private>/ssh or C2W_SSH_SOURCE; refuses open ACLs/modes
-  keychain                  # keychain package or upstream 2.8.5 script; ~/.keychain_default_keys
+  ssh-keys                  # ~/.ssh from <private>/ssh or C2W_SSH_SOURCE; refuses open ACLs/modes; AddKeysToAgent yes
+  keychain                  # keychain package or upstream 2.8.5 script; agent starts empty, keys lazy-load
   claude                    # Claude Code, native installer (C2W_CLAUDE_VERSION)
   databricks-ug             # Databricks Unity Gateway (ug, formerly ucode) + Databricks CLI
 tests/

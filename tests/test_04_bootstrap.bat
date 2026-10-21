@@ -375,6 +375,28 @@ call "%HELPERS%" assert_output_contains "%OUT%" "private /mnt/" "private-resolve
 call "%HELPERS%" assert_output_contains "%OUT%" "echo profile /mnt/" "private-resolve: C2W_USERPROFILE_LX expands"
 call "%HELPERS%" assert_output_not_contains "%OUT%" "%%C2W_" "private-resolve: no variable left unexpanded"
 
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m a folder in the CWD with a strap's name does not shadow the built-in
+:: regression: run from C:\code, "-b devtools" used the devtools repo folder and ran 0 commands
+set "_CWDF=%C2W_TMPDIR%\cwd_folder"
+if not exist "%_CWDF%\devtools" mkdir "%_CWDF%\devtools"
+pushd "%_CWDF%"
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-cwdf -b devtools --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+popd
+call "%HELPERS%" assert_exit_zero "%_RC%" "cwd-folder: exit 0"
+:: (no path in the search string: findstr treats backslashes as escapes)
+call "%HELPERS%" assert_output_not_contains "%OUT%" "is a folder" "cwd-folder: the CWD folder was not picked"
+call "%HELPERS%" assert_output_contains "%OUT%" "build-essential" "cwd-folder: built-in commands listed"
+
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m a strap path that is a folder is an error, not 0 commands
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-dirstrap -b "%_CWDF%\devtools" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_nonzero "%_RC%" "folder-strap: non-zero exit"
+call "%HELPERS%" assert_output_contains "%OUT%" "Bootstrap is a folder, not a file" "folder-strap: clear error"
+call "%HELPERS%" assert_output_not_contains "%OUT%" "Bootstrap complete" "folder-strap: no false success"
+
 echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m built-in strap wins over a private one of the same name
 > "%_PV%\straps\sudo" echo echo private sudo
 call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-pvwin --private "%_PV%" -b sudo --dry-run > "%OUT%" 2>&1

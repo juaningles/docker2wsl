@@ -2,10 +2,11 @@
 # funtoo/keychain) and make every login reuse one agent: the distro package (apt/apk, 2.8.5)
 # when passwordless sudo is available (bootstrap sudo), else the prebuilt script from the
 # upstream 2.8.5 tag into ~/.local/bin (C2W_KEYCHAIN_FALLBACK pins another tag that ships one).
-# Run after poststrap ssh-keys: keys to load come from ~/.keychain_default_keys (written by
-# ssh-keys, else filled here from whatever ~/.ssh holds at that moment). devtools' env.sh already runs keychain at shell start; without devtools the
-# eval line is appended to ~/.profile once. Also runnable on an existing distro: bash poststraps/keychain
-is_key() { case "$1" in *.pub|config|known_hosts*|authorized_keys|README*|*.md|environment|rc) return 1 ;; *) return 0 ;; esac; }
+# The agent starts EMPTY: keys are added on first use through "AddKeysToAgent yes" (written to
+# ~/.ssh/config by poststrap ssh-keys), so no passphrase is asked at login. To preload specific
+# keys, list them (file names in ~/.ssh) in ~/.keychain_default_keys. devtools' env.sh already
+# runs keychain at shell start; without devtools the eval line is appended to ~/.profile once.
+# Also runnable on an existing distro: bash poststraps/keychain
 # full paths: a non-root PATH and sudo's secure_path on Alpine both lack /sbin, where apk lives
 APT=$(command -v apt-get || true); APK=$(command -v apk || ls /sbin/apk 2>/dev/null || true)
 if ! command -v keychain >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
@@ -23,13 +24,10 @@ if ! command -v keychain >/dev/null 2>&1 && [ ! -x $HOME/.local/bin/keychain ]; 
     chmod 755 $HOME/.local/bin/keychain
 fi
 KC=$(command -v keychain || echo $HOME/.local/bin/keychain)
-if [ ! -s $HOME/.keychain_default_keys ]; then
-    : > $HOME/.keychain_default_keys
-    for F in $HOME/.ssh/*; do B=$(basename "$F"); if [ -f "$F" ] && is_key "$B"; then echo "$B" >> $HOME/.keychain_default_keys; fi; done
-fi
+if [ -f $HOME/.ssh/config ] && ! grep -qi '^ *AddKeysToAgent' $HOME/.ssh/config; then echo "[WARN] keychain: ~/.ssh/config has no AddKeysToAgent; keys will not load on first use (run poststrap ssh-keys, or add AddKeysToAgent yes)"; fi
 if [ ! -d $HOME/devtools ] && ! grep -qs 'keychain --eval' $HOME/.profile; then
     printf '\n# ssh-agent via keychain (container2wsl poststrap keychain); ~/.local/bin may not be on PATH yet\nKC=$(command -v keychain || echo "$HOME/.local/bin/keychain")\n[ -x "$KC" ] && eval "$("$KC" --eval --agents ssh --quiet $(cat ~/.keychain_default_keys 2>/dev/null))"\n' >> $HOME/.profile
     echo "keychain: eval line added to ~/.profile (no devtools here)"
 fi
-echo "keychain: keys: $(tr '\n' ' ' < $HOME/.keychain_default_keys)"
+if [ -s $HOME/.keychain_default_keys ]; then echo "keychain: preloading at login: $(tr '\n' ' ' < $HOME/.keychain_default_keys)"; else echo "keychain: agent starts empty; keys load on first use"; fi
 $KC --version 2>&1 | head -1

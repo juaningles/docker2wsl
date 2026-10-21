@@ -337,14 +337,16 @@ goto :eof
 
 :resolve_strap
 :: %~1 = variable holding the strap as given   %~2 = bootstraps or poststraps
+:: Every candidate must be a FILE ("exist X" alone is also true for a folder): run from C:\code,
+:: "-b devtools" would otherwise pick the devtools repo folder in the current directory.
 set "_RS_VAL=!%~1!"
-if exist "%_RS_VAL%" goto :eof
-if exist "%C2W_SCRIPT_DIR%%~2\%_RS_VAL%" (set "%~1=%C2W_SCRIPT_DIR%%~2\%_RS_VAL%" & goto :eof)
-if exist "%C2W_SCRIPT_DIR%%_RS_VAL%"      (set "%~1=%C2W_SCRIPT_DIR%%_RS_VAL%" & goto :eof)
+if exist "%_RS_VAL%" if not exist "%_RS_VAL%\" goto :eof
+if exist "%C2W_SCRIPT_DIR%%~2\%_RS_VAL%" if not exist "%C2W_SCRIPT_DIR%%~2\%_RS_VAL%\" (set "%~1=%C2W_SCRIPT_DIR%%~2\%_RS_VAL%" & goto :eof)
+if exist "%C2W_SCRIPT_DIR%%_RS_VAL%" if not exist "%C2W_SCRIPT_DIR%%_RS_VAL%\" (set "%~1=%C2W_SCRIPT_DIR%%_RS_VAL%" & goto :eof)
 if not defined C2W_PRIVATE_DIRS goto :eof
 for %%d in ("!C2W_PRIVATE_DIRS:;=" "!") do (
-    if exist "%%~d\straps\%_RS_VAL%" (set "%~1=%%~d\straps\%_RS_VAL%" & goto :eof)
-    if exist "%%~d\%~2\%_RS_VAL%"   (set "%~1=%%~d\%~2\%_RS_VAL%" & goto :eof)
+    if exist "%%~d\straps\%_RS_VAL%" if not exist "%%~d\straps\%_RS_VAL%\" (set "%~1=%%~d\straps\%_RS_VAL%" & goto :eof)
+    if exist "%%~d\%~2\%_RS_VAL%" if not exist "%%~d\%~2\%_RS_VAL%\" (set "%~1=%%~d\%~2\%_RS_VAL%" & goto :eof)
 )
 goto :eof
 
@@ -438,6 +440,11 @@ if not exist "%~1" (
     echo.
     exit /b 0
 )
+if exist "%~1\" (
+    echo [DRY-RUN] WARNING: Bootstrap is a folder, not a file: %~1
+    echo.
+    exit /b 0
+)
 echo [DRY-RUN] Bootstrap commands from: %~1 (as root)
 call :set_strap_dir "%~1"
 for /f "usebackq delims= eol=" %%L in ("%~1") do (
@@ -456,6 +463,11 @@ if not exist "%~1" (
     echo.
     exit /b 0
 )
+if exist "%~1\" (
+    echo [DRY-RUN] WARNING: Poststrap is a folder, not a file: %~1
+    echo.
+    exit /b 0
+)
 echo [DRY-RUN] Poststrap commands from: %~1 (as %C2W_USER%)
 call :set_strap_dir "%~1"
 for /f "usebackq delims= eol=" %%L in ("%~1") do (
@@ -470,12 +482,20 @@ exit /b 0
 
 :after_dryrun
 
+:: --- Per-run temp folder: concurrent builds (or a build and the test suite) must not share
+:: rendered scripts, stamps or manifests. Removed at the end; folders older than a day left
+:: by a build that failed early are swept here.
+forfiles /p "%TEMP%" /m c2w-run-* /d -1 /c "cmd /c if @isdir==TRUE rmdir /s /q @path" >nul 2>&1
+set "C2W_TMP=%TEMP%\c2w-run-%RANDOM%%RANDOM%"
+if exist "%C2W_TMP%\" set "C2W_TMP=%C2W_TMP%-%RANDOM%"
+mkdir "%C2W_TMP%" 2>nul
+
 :: --- Manifest bookkeeping (lib\manifest.ps1; skipped when the helper is absent) ---
 set "C2W_MANIFEST=0"
 if exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" set "C2W_MANIFEST=1"
-set "C2W_M_TMP=%TEMP%\c2w_manifest.jsonl"
-set "C2W_BUILD_START=%TEMP%\c2w_build_start.txt"
-set "C2W_STRAP_START=%TEMP%\c2w_strap_start.txt"
+set "C2W_M_TMP=%C2W_TMP%\c2w_manifest.jsonl"
+set "C2W_BUILD_START=%C2W_TMP%\c2w_build_start.txt"
+set "C2W_STRAP_START=%C2W_TMP%\c2w_strap_start.txt"
 set "C2W_STRAP_SEQ=0"
 set "C2W_IMAGE_PULLED=0"
 if "%C2W_MANIFEST%"=="1" powershell -noprofile -command "[DateTime]::UtcNow.ToString('o')" > "%C2W_BUILD_START%" 2>nul
@@ -493,7 +513,7 @@ if errorlevel 1 (
 )
 
 :: --- Step 2: Export image to a tar archive ---
-set "EXPORT_TAR=%TEMP%\c2w_%ARG_WSL_NAME%.tar"
+set "EXPORT_TAR=%C2W_TMP%\c2w_%ARG_WSL_NAME%.tar"
 call :docker_export_image "%ARG_IMAGE%" "%EXPORT_TAR%"
 if errorlevel 1 (
     echo [ERROR] Failed to export Docker image.
@@ -674,7 +694,7 @@ exit /b 0
 :: Import a tar archive as a WSL 2 distribution.
 :: %~1 = distro name   %~2 = install path   %~3 = tar file
 echo [3/%STEP_COUNT%] Importing WSL distribution '%~1'...
-set "_WIMPORT_TMP=%TEMP%\c2w_wslimport.tmp"
+set "_WIMPORT_TMP=%C2W_TMP%\c2w_wslimport.tmp"
 call %WSL_CMD% --import "%~1" "%~2" "%~3" --version 2 > "%_WIMPORT_TMP%" 2>&1
 set "_WIMPORT_RC=%errorlevel%"
 :: Detect failure: non-zero exit OR error text in output.
@@ -702,7 +722,7 @@ echo [4/%STEP_COUNT%] Configuring default user '%~2'...
 :: WSL may need a moment after import before accepting commands; retry until ready.
 :: WSL returns exit 0 even on failure, so we capture output and check for errors.
 set "_WCFG_WAIT=0"
-set "_WCFG_TMP=%TEMP%\c2w_wslcfg.tmp"
+set "_WCFG_TMP=%C2W_TMP%\c2w_wslcfg.tmp"
 :wsl_cfg_wait
 call %WSL_CMD% -d %~1 -u root -- echo ok > "%_WCFG_TMP%" 2>&1
 set "_WCFG_RC=%errorlevel%"
@@ -733,11 +753,11 @@ call %WSL_CMD% -d %~1 -u root -- useradd -m -s /bin/bash "%~2" >nul 2>&1
 call %WSL_CMD% -d %~1 -u root -- usermod -aG sudo "%~2" >nul 2>&1
 
 :: Write /etc/wsl.conf via a Windows temp file, then copy + fix line endings inside the distro.
-set "_WCFG_CONF=%TEMP%\c2w_wsl.conf"
+set "_WCFG_CONF=%C2W_TMP%\c2w_wsl.conf"
 (echo [user]) > "%_WCFG_CONF%"
 (echo default=%~2) >> "%_WCFG_CONF%"
 call :win2lx "%_WCFG_CONF%" _WCFG_CONF_LX
-set "_WCFG_CP_TMP=%TEMP%\c2w_wslcp.tmp"
+set "_WCFG_CP_TMP=%C2W_TMP%\c2w_wslcp.tmp"
 call %WSL_CMD% -d %~1 -u root -- cp "%_WCFG_CONF_LX%" /etc/wsl.conf > "%_WCFG_CP_TMP%" 2>&1
 set "_WCFG_CP_RC=%errorlevel%"
 set "_WCFG_CP_FAIL=0"
@@ -767,8 +787,8 @@ exit /b 0
 :: Check if a WSL distribution is already registered.
 :: %~1 = distro name
 :: Returns exit 0 if found, exit 1 if not found.
-set "_WDE_TMP=%TEMP%\c2w_wsllist.tmp"
-set "_WDE_ASCII=%TEMP%\c2w_wslascii.tmp"
+set "_WDE_TMP=%C2W_TMP%\c2w_wsllist.tmp"
+set "_WDE_ASCII=%C2W_TMP%\c2w_wslascii.tmp"
 call %WSL_CMD% --list --quiet > "%_WDE_TMP%" 2>&1
 powershell -noprofile -command "Get-Content -Path '%_WDE_TMP%' -Encoding Unicode 2>$null | Out-File -Encoding ascii '%_WDE_ASCII%'" 2>nul
 set "_WDE_FOUND=1"
@@ -789,7 +809,7 @@ exit /b %_WDE_FOUND%
 :: Uses UNQUOTED name because wsl --unregister behaves like wsl -d (silently
 :: fails with quoted names on some Windows builds).
 echo       Unregistering existing distro '%~1'...
-set "_WFU_TMP=%TEMP%\c2w_wslunreg.tmp"
+set "_WFU_TMP=%C2W_TMP%\c2w_wslunreg.tmp"
 call %WSL_CMD% --unregister %~1 > "%_WFU_TMP%" 2>&1
 set "_WFU_RC=%errorlevel%"
 set "_WFU_FAIL=0"
@@ -826,8 +846,12 @@ if not exist "%~2" (
     echo [ERROR] Bootstrap file not found: %~2
     exit /b 1
 )
+if exist "%~2\" (
+    echo [ERROR] Bootstrap is a folder, not a file: %~2
+    exit /b 1
+)
 set "_BS_COUNT=0"
-set "_BS_TMP=%TEMP%\c2w_bootstrap.tmp"
+set "_BS_TMP=%C2W_TMP%\c2w_bootstrap.tmp"
 call :set_strap_dir "%~2"
 :: Count commands and display them (with variable expansion for user feedback)
 for /f "usebackq delims=" %%L in ("%~2") do (
@@ -842,7 +866,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
 :: (including C2W_* and any standard env vars), strip comments/blanks,
 :: prepend "set -e", and write a clean .sh file with Unix line endings.
 :: This avoids CMD mangling shell operators (>>, |, &, etc.).
-set "_BS_SH=%TEMP%\c2w_bootstrap_cmd.sh"
+set "_BS_SH=%C2W_TMP%\c2w_bootstrap_cmd.sh"
 powershell -noprofile -command ^
   "[IO.File]::WriteAllText('%C2W_STRAP_START%', [DateTime]::UtcNow.ToString('o')); " ^
   "$lines = @('set -e'); " ^
@@ -885,8 +909,12 @@ if not exist "%~2" (
     echo [ERROR] Poststrap file not found: %~2
     exit /b 1
 )
+if exist "%~2\" (
+    echo [ERROR] Poststrap is a folder, not a file: %~2
+    exit /b 1
+)
 set "_PS_COUNT=0"
-set "_PS_TMP=%TEMP%\c2w_poststrap.tmp"
+set "_PS_TMP=%C2W_TMP%\c2w_poststrap.tmp"
 call :set_strap_dir "%~2"
 :: Count commands and display them (with variable expansion for user feedback)
 for /f "usebackq delims=" %%L in ("%~2") do (
@@ -900,7 +928,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
 :: Use PowerShell to read the poststrap file, expand %VAR% references,
 :: strip comments/blanks, prepend "set -e", and write a clean .sh file
 :: with Unix line endings. Same as bootstrap but runs as user, not root.
-set "_PS_SH=%TEMP%\c2w_poststrap_cmd.sh"
+set "_PS_SH=%C2W_TMP%\c2w_poststrap_cmd.sh"
 powershell -noprofile -command ^
   "[IO.File]::WriteAllText('%C2W_STRAP_START%', [DateTime]::UtcNow.ToString('o')); " ^
   "$lines = @('set -e'); " ^
@@ -960,11 +988,11 @@ exit /b 0
 :: as /usr/local/bin/c2w-manifest. Copied via TEMP so the /mnt/c path rule above applies,
 :: and CRs are stripped in case the checkout has CRLF line endings.
 if not exist "%C2W_SCRIPT_DIR%lib\c2w-manifest" exit /b 0
-copy /y "%C2W_SCRIPT_DIR%lib\c2w-manifest" "%TEMP%\c2w-manifest" >nul 2>&1
-call :win2lx "%TEMP%\c2w-manifest" _MT_LX
+copy /y "%C2W_SCRIPT_DIR%lib\c2w-manifest" "%C2W_TMP%\c2w-manifest" >nul 2>&1
+call :win2lx "%C2W_TMP%\c2w-manifest" _MT_LX
 call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 755 "!_MT_LX!" /usr/local/bin/c2w-manifest >nul 2>&1
 call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- sed -i "s/\r//" /usr/local/bin/c2w-manifest >nul 2>&1
-del /f /q "%TEMP%\c2w-manifest" >nul 2>&1
+del /f /q "%C2W_TMP%\c2w-manifest" >nul 2>&1
 exit /b 0
 
 
@@ -1003,5 +1031,5 @@ exit /b 0
 :: %~1 = ok or failed (C2W_M_FAILED names the failed step)
 set "C2W_M_RESULT=%~1"
 call :manifest complete
-del /f /q "%C2W_BUILD_START%" "%C2W_STRAP_START%" "%C2W_M_TMP%" >nul 2>&1
+if defined C2W_TMP if exist "%C2W_TMP%\" rmdir /s /q "%C2W_TMP%" >nul 2>&1
 exit /b 0

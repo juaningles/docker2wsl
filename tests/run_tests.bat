@@ -135,6 +135,12 @@ set "C2W_FAIL=0"
 :: Temp directory for test artefacts
 set "C2W_TMPDIR=%TEMP%\c2w_tests_%RANDOM%"
 mkdir "%C2W_TMPDIR%" >nul 2>&1
+:: container2wsl puts its per-run c2w-run-* folders under TEMP; keep them inside the test
+:: folder so tests never touch a real build's temp files and leave nothing behind.
+set "C2W_REAL_TEMP=%TEMP%"
+set "TEMP=%C2W_TMPDIR%\temp"
+set "TMP=%TEMP%"
+mkdir "%TEMP%" >nul 2>&1
 
 :: Log file for mock calls
 set "C2W_MOCK_LOG=%C2W_TMPDIR%\mock_calls.log"
@@ -195,6 +201,9 @@ if %FILE_COUNT% equ 0 (
 )
 
 :: ---- Cleanup: unregister any WSL distros created during tests ----
+:: back to the real TEMP: the test folder (and its temp\) is deleted below
+set "TEMP=%C2W_REAL_TEMP%"
+set "TMP=%C2W_REAL_TEMP%"
 set "_WSL_TMP2=%TEMP%\c2w_wsllist2_%RANDOM%.txt"
 set "_WSL_ASCII2=%TEMP%\c2w_wslascii2_%RANDOM%.txt"
 wsl --list --quiet > "!_WSL_TMP2!" 2>&1

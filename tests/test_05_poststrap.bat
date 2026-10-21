@@ -352,7 +352,8 @@ call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "ssh-keys: 
 call "%HELPERS%" assert_output_contains "%OUT%" "ssh-source-check.ps1" "ssh-keys: Windows ACL check wired in"
 call "%HELPERS%" assert_output_contains "%OUT%" "needs 700" "ssh-keys: Linux dir mode check present"
 call "%HELPERS%" assert_output_contains "%OUT%" "needs 600 or 400" "ssh-keys: Linux key mode check present"
-call "%HELPERS%" assert_output_contains "%OUT%" "keychain_default_keys" "ssh-keys: writes the keychain key list"
+call "%HELPERS%" assert_output_contains "%OUT%" "AddKeysToAgent yes" "ssh-keys: keys load lazily on first use"
+call "%HELPERS%" assert_output_contains "%OUT%" "has no keys or config yet, skipped" "ssh-keys: empty source folders are skipped, not fatal"
 
 echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m keychain built-in poststrap
 call :reset_mocks 2>nul

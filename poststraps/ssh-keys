@@ -9,8 +9,11 @@
 #   C2W_SSH_ACL_CHECK=off skips the Windows check (not recommended).
 # Several sources: later ones override files of the same name; config files are concatenated in
 # order (ssh uses the first matching Host block, so earlier sources win inside config).
-# Also writes ~/.keychain_default_keys (used by the keychain poststrap and devtools). Key names are
-# printed, key material never is. Also runnable on an existing distro: bash poststraps/ssh-keys
+# Keys are loaded LAZILY: ~/.ssh/config starts with "AddKeysToAgent yes", so ssh adds each key
+# to the agent the first time it is used (a passphrase key prompts once then; a passphrase-free
+# key is added silently). Nothing is loaded at login: keychain (poststrap keychain) starts the
+# agent empty. To preload specific keys instead, list them in ~/.keychain_default_keys.
+# Key names are printed, key material never is. Also runnable on an existing distro: bash poststraps/ssh-keys
 SRC="%C2W_SSH_SOURCE%"
 case "$SRC" in *C2W_SSH_SOURCE*) SRC= ;; esac
 DIRS="%C2W_PRIVATE_DIRS_LX%"
@@ -21,6 +24,9 @@ ACL="%C2W_SSH_ACL_CHECK%"
 case "$ACL" in *C2W_SSH_ACL_CHECK*) ACL=on ;; esac
 PS=$(command -v powershell.exe || ls /mnt/*/Windows/System32/WindowsPowerShell/v1.0/powershell.exe 2>/dev/null | head -1)
 is_key() { case "$1" in *.pub|config|known_hosts*|authorized_keys|README*|*.md) return 1 ;; *) return 0 ;; esac; }
+# rd FILE: print a source file. drvfs shows a Windows file that only its owner may read as mode 600
+# owned by uid 1000, so a user with another uid is refused although Windows allows it; root is not.
+rd() { if [ -r "$1" ]; then cat "$1"; elif sudo -n true 2>/dev/null; then sudo -n cat "$1"; else echo "[ERROR] ssh-keys: $1 is not readable as $(id -un) (WSL maps owner-only Windows files to uid 1000). Add bootstrap 'sudo' so the copy can read it as root." >&2; return 1; fi; }
 # collect source dirs
 SOURCES=
 if [ -n "$SRC" ]; then
@@ -31,6 +37,16 @@ else
     IFS=:; for D in $DIRS; do [ -d "$D/ssh" ] && SOURCES="$SOURCES${SOURCES:+:}$D/ssh"; done; unset IFS
 fi
 if [ -z "$SOURCES" ]; then echo "[ERROR] ssh-keys: no source. Put keys in the ssh/ folder of a private overlay, or set C2W_SSH_SOURCE (e.g. %%USERPROFILE%%\\.ssh)."; exit 1; fi
+# drop sources that hold nothing to install (only a README, or empty); warn, do not fail
+KEEP=
+IFS=:; for S in $SOURCES; do
+    unset IFS; HAS=
+    for F in "$S"/*; do [ -f "$F" ] || continue; case "$(basename "$F")" in README*|*.md) ;; *) HAS=1 ;; esac; done
+    if [ -n "$HAS" ]; then KEEP="$KEEP${KEEP:+:}$S"; else echo "[WARN] ssh-keys: $S has no keys or config yet, skipped"; fi
+    IFS=:
+done; unset IFS
+SOURCES="$KEEP"
+if [ -z "$SOURCES" ]; then echo "ssh-keys: nothing to install"; exit 0; fi
 # check every source before copying anything
 IFS=:; for S in $SOURCES; do
     unset IFS
@@ -39,11 +55,13 @@ IFS=:; for S in $SOURCES; do
         if [ "$ACL" = off ]; then echo "[WARN] ssh-keys: Windows ACL check skipped for $S (C2W_SSH_ACL_CHECK=off)"
         else
             [ -n "$PS" ] && [ -n "$CHECK" ] || { echo "[ERROR] ssh-keys: cannot verify Windows ACLs (powershell.exe not reachable or lib/ssh-source-check.ps1 missing). Refusing. Set C2W_SSH_ACL_CHECK=off to override."; exit 1; }
-            # capture to a file: a pipeline's status would be tr's, not powershell's
-            "$PS" -NoProfile -ExecutionPolicy Bypass -File "$CHECK" -Path "$(wslpath -w "$S")" > "$HOME/.c2w-acl.tmp" 2>&1; RC=$?
+            # capture to a file (a pipeline's status would be tr's), inside an if: under set -e a
+            # bare failing command would kill the script before the refusal is printed
+            if "$PS" -NoProfile -ExecutionPolicy Bypass -File "$CHECK" -Path "$(wslpath -w "$S")" > "$HOME/.c2w-acl.tmp" 2>&1; then RC=0; else RC=1; fi
             tr -d '\r' < "$HOME/.c2w-acl.tmp"; rm -f "$HOME/.c2w-acl.tmp"
             [ "$RC" -eq 0 ] || exit 1
-        fi ;;
+        fi
+        for F in "$S"/*; do [ -f "$F" ] || continue; case "$(basename "$F")" in README*|*.md) continue ;; esac; rd "$F" > /dev/null; done ;;
     *)
         M=$(stat -c %a "$S"); case "$M" in *00) ;; *) echo "[ERROR] ssh-keys: $S is mode $M; needs 700 (or 750). Refusing."; exit 1 ;; esac
         for F in "$S"/*; do [ -f "$F" ] || continue; is_key "$(basename "$F")" || continue
@@ -55,7 +73,9 @@ done; unset IFS
 # copy
 umask 077
 mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
-rm -f "$HOME/.ssh/config.c2w-new"
+# options before the first Host block apply to every host, and ssh keeps the first value it
+# sees, so this header wins over anything the copied configs say
+printf '# written by the container2wsl ssh-keys poststrap\n# lazy loading: each key joins the agent on first use, none at login\nAddKeysToAgent yes\n\n' > "$HOME/.ssh/config.c2w-new"
 N=0
 IFS=:; for S in $SOURCES; do
     unset IFS
@@ -64,18 +84,17 @@ IFS=:; for S in $SOURCES; do
         [ -f "$F" ] || continue
         B=$(basename "$F")
         case "$B" in README*|*.md) continue ;; esac
-        if [ "$B" = config ]; then { printf '# ---- from %s\n' "$S"; sed 's/\r$//' "$F"; echo; } >> "$HOME/.ssh/config.c2w-new"; echo "  config (appended)"; continue; fi
+        rd "$F" > "$HOME/.ssh/.c2w-tmp"
+        if [ "$B" = config ]; then { printf '# ---- from %s\n' "$S"; sed 's/\r$//' "$HOME/.ssh/.c2w-tmp"; echo; } >> "$HOME/.ssh/config.c2w-new"; rm -f "$HOME/.ssh/.c2w-tmp"; echo "  config (appended)"; continue; fi
         if is_key "$B"; then MODE=600; else case "$B" in *.pub|known_hosts*) MODE=644 ;; *) MODE=600 ;; esac; fi
-        sed 's/\r$//' "$F" > "$HOME/.ssh/$B" && chmod $MODE "$HOME/.ssh/$B" && echo "  $B ($MODE)"
+        sed 's/\r$//' "$HOME/.ssh/.c2w-tmp" > "$HOME/.ssh/$B" && rm -f "$HOME/.ssh/.c2w-tmp" && chmod $MODE "$HOME/.ssh/$B" && echo "  $B ($MODE)"
         N=$((N+1))
     done
     IFS=:
 done; unset IFS
-if [ -f "$HOME/.ssh/config.c2w-new" ]; then mv "$HOME/.ssh/config.c2w-new" "$HOME/.ssh/config" && chmod 600 "$HOME/.ssh/config"; fi
-# keys for keychain / devtools env.sh
-: > "$HOME/.keychain_default_keys"
-for F in "$HOME"/.ssh/*; do B=$(basename "$F"); if [ -f "$F" ] && is_key "$B"; then echo "$B" >> "$HOME/.keychain_default_keys"; fi; done
-echo "ssh-keys: $N files; keys for keychain: $(tr '\n' ' ' < "$HOME/.keychain_default_keys")"
+mv "$HOME/.ssh/config.c2w-new" "$HOME/.ssh/config" && chmod 600 "$HOME/.ssh/config"
+K=0; for F in "$HOME"/.ssh/*; do if [ -f "$F" ] && is_key "$(basename "$F")"; then K=$((K+1)); fi; done
+echo "ssh-keys: $N files, $K private keys; loaded into the agent on first use (AddKeysToAgent yes)"
 # validate the config (needs ssh; install it when sudo allows, otherwise just say so)
 if ! command -v ssh >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
     # full paths: a non-root PATH and sudo's secure_path on Alpine both lack /sbin, where apk lives

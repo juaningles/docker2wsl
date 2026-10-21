@@ -121,6 +121,28 @@ Poststrap runs commands as the created user (not root), unlike bootstrap.
 | Poststrap in config banner | `--dry-run -p file` | "Poststrap:" label in banner |
 | powerlevel10k built-in poststrap | `-p powerlevel10k` | Exit 0, Oh My Zsh install command and theme setup shown |
 | Homebrew built-in bootstrap | `bootstraps\homebrew` path | Exit 0, build-essential, Linuxbrew prefix ownership fix, and Homebrew shown |
+| uv, devtools-shell, claude, databricks-ug | built-in poststraps (`-p` by name) | Installer URLs shown; `C2W_UV_PYTHON`, `C2W_DEVTOOLS_REPO`, `C2W_CLAUDE_VERSION` expand; devtools-shell falls back to the `devtools` clone next to container2wsl; databricks-ug shows the legacy ucode URL fallback |
+| devtools-overlay | `--private DIR -p devtools-overlay` | `C2W_PRIVATE_DIRS_LX` expanded into the script, `install.sh --overlay`, `safe.directory` |
+| ssh-keys | `-p ssh-keys` | Windows ACL check wired in, Linux 700 / 600 mode checks, empty source folders skipped, `AddKeysToAgent yes` (lazy loading) |
+| ssh-keys `C2W_SSH_SOURCE` | env var + `--dry-run` | the source folder is expanded into the script |
+| keychain | `-p keychain` | package install, upstream script fallback, `~/.keychain_default_keys` as the opt-in preload list |
+
+Also in `test_04_bootstrap.bat`: the new bootstraps (`k8s-tools`, `data-tools`, `azure-cli`, `motd`); bare names resolving from a private folder's `straps\` and `poststraps\`, with `C2W_STRAP_DIR_LX`, `C2W_SCRIPT_DIR_LX`, `C2W_PRIVATE_DIRS_LX` and `C2W_USERPROFILE_LX` expanded and a built-in strap winning over a private one of the same name; and a dry run of every built-in strap at once, from an empty folder, asserting that CMD's command display creates no stray files.
+
+Also in `test_01_args.bat`: `--private` (folder with a space, missing folder is an error), `C2W_PRIVATE_DIRS` with two folders, auto-detection of a sibling with a `.devtools-overlay` marker from a copy of the script (an unmarked sibling is ignored), and the storage root default (`%SystemDrive%\wsl-storage`) and its `C2W_LOCATION` override.
+
+### `test_06_manifest.bat` — Build manifest (MOCKED docker + wsl)
+
+Distros are stored under `%C2W_TMPDIR%\store`; `tests\manifest_summary.ps1` parses the JSON Lines manifest (any parse failure is reported) into quote-free `key=value` lines for `findstr`.
+
+| Test | Setup | What it verifies |
+|------|-------|------------------|
+| Full build | run from `%TEMP%`, `-b sudo -p uv --private DIR`, canned `image inspect` JSON | create, two strap records, complete; command line, image id and digests (as an array), pulled flag, user, requested strap names, private folder, rendered-script copies root-only, `c2w-manifest` installed |
+| Pulled image | `C2W_MOCK_IMAGE_EXISTS=0` | `pulled=true`; create + complete only |
+| Failed build | poststrap file missing | strap and complete records, complete names the failed step |
+| `--force` | distro reported as existing | previous manifest kept as `.prev.jsonl`, `replaced_existing=true` |
+| Dry run | `--dry-run` | banner names the manifest, nothing written |
+| No helper | copy of the script without `lib\` | builds, banner says `Manifest : off`, no warnings, nothing written |
 
 ## Mock Details
 
@@ -131,6 +153,7 @@ Simulates `docker image inspect`, `docker pull`, `docker create`, `docker export
 | Variable | Default | Effect |
 |----------|---------|--------|
 | `C2W_MOCK_IMAGE_EXISTS` | `0` | `1` = `docker image inspect` succeeds |
+| `C2W_MOCK_INSPECT_FILE` | (unset) | file whose content `docker image inspect` prints (canned JSON for the manifest tests) |
 | `C2W_MOCK_PULL_FAIL` | `0` | `1` = `docker pull` returns error |
 | `C2W_MOCK_CREATE_FAIL` | `0` | `1` = `docker create` returns error |
 | `C2W_MOCK_EXPORT_FAIL` | `0` | `1` = `docker export` returns error |
@@ -160,7 +183,7 @@ Before running, the runner checks `wsl --list` for any distro names starting wit
 
 After all tests complete, the runner:
 1. Unregisters any WSL distros matching `c2wt*`
-2. Removes storage directories under `C:\wsl-storage` matching the test ID
+2. Removes storage directories under the storage root (`C2W_LOCATION`, else `%SystemDrive%\wsl-storage`) matching the test ID
 3. Deletes the temporary directory (`C2W_TMPDIR`)
 
 ### HTML Reports

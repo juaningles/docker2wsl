@@ -33,14 +33,28 @@ function Offending([string]$item) {
 # private keys = everything that is not public, config or documentation
 $skip = '^(.*\.pub|config|known_hosts.*|authorized_keys|README.*|.*\.md)$'
 $bad = @(Offending $dir.FullName)
+$unreadable = @()
 foreach ($f in Get-ChildItem -LiteralPath $dir.FullName -File -Force) {
-  if ($f.Name -match $skip) { continue }
-  $bad += @(Offending $f.FullName)
+  if ($f.Name -notmatch $skip) { $bad += @(Offending $f.FullName) }
+  # WSL reads /mnt files with this (non-elevated) token: a file that only Administrators may
+  # read passes the ACL test above but fails at copy time, so test real read access too.
+  if ($f.Name -notmatch '^(README.*|.*\.md)$') {
+    try { [IO.File]::OpenRead($f.FullName).Close() } catch { $unreadable += $f.FullName }
+  }
 }
 
-if ($bad.Count -eq 0) { Write-Output "[ssh-keys] ACL ok: $($dir.FullName) (owner $($acl.Owner))"; exit 0 }
-Write-Output "[ssh-keys] REFUSED: $($dir.FullName) is readable by accounts other than the owner, SYSTEM and Administrators:"
-$bad | Sort-Object -Unique | ForEach-Object { Write-Output $_ }
-Write-Output "[ssh-keys] Fix it from a Windows shell (owner only, inheritance off), then rerun:"
-Write-Output ("  icacls ""{0}"" /inheritance:r /grant:r ""{1}:(OI)(CI)F"" ""SYSTEM:(OI)(CI)F"" ""Administrators:(OI)(CI)F""" -f $dir.FullName, $acl.Owner)
+$me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+if ($bad.Count -eq 0 -and $unreadable.Count -eq 0) { Write-Output "[ssh-keys] ACL ok: $($dir.FullName) (owner $($acl.Owner))"; exit 0 }
+if ($bad.Count -gt 0) {
+  Write-Output "[ssh-keys] REFUSED: $($dir.FullName) is readable by accounts other than the owner, SYSTEM and Administrators:"
+  $bad | Sort-Object -Unique | ForEach-Object { Write-Output $_ }
+  Write-Output "[ssh-keys] Fix it from a Windows shell (owner only, inheritance off), then rerun:"
+  Write-Output ("  icacls ""{0}"" /inheritance:r /grant:r ""{1}:(OI)(CI)F"" ""SYSTEM:(OI)(CI)F"" ""Administrators:(OI)(CI)F""" -f $dir.FullName, $acl.Owner)
+}
+if ($unreadable.Count -gt 0) {
+  Write-Output "[ssh-keys] REFUSED: these files are not readable by $me (WSL runs with this non-elevated token, so the copy would fail):"
+  $unreadable | ForEach-Object { Write-Output "  $_" }
+  Write-Output "[ssh-keys] Give yourself explicit access (keeps SYSTEM/Administrators), then rerun:"
+  $unreadable | ForEach-Object { Write-Output ("  icacls ""{0}"" /grant:r ""{1}:F"" ""SYSTEM:F"" ""Administrators:F""" -f $_, $me) }
+}
 exit 1
