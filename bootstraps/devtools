@@ -1,5 +1,6 @@
 apt-get update
 apt-get install -y \
+  make vim \
   git curl wget \
   build-essential \
   jq unzip zip \
