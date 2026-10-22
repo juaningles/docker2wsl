@@ -126,6 +126,7 @@ Poststrap runs commands as the created user (not root), unlike bootstrap.
 | ssh-keys | `-p ssh-keys` | Windows ACL check wired in, a clear message when WSL interop is down (after trying to re-register it), Linux 700 / 600 mode checks, empty source folders skipped, `AddKeysToAgent yes` (lazy loading) |
 | ssh-keys `C2W_SSH_SOURCE` | env var + `--dry-run` | the source folder is expanded into the script |
 | keychain | `-p keychain` | package install, upstream script fallback, `~/.keychain_default_keys` as the opt-in preload list |
+| podman-machine | `C2W_PODMAN_CONNECTION` + `-p podman-machine` | podman and podman-docker install, the variable expanded into the script, the default ssh connection, `remote = true`, the `XDG_RUNTIME_DIR` wrapper |
 
 Also in `test_04_bootstrap.bat`: the new bootstraps (`k8s-tools` with `dnsutils` / `bind-tools`, `data-tools`, `azure-cli` with the `lx` check that ignores a Windows `az` on the WSL PATH, `motd`); bare names resolving from a private folder's `straps\` and `poststraps\`, with `C2W_STRAP_DIR_LX`, `C2W_SCRIPT_DIR_LX`, `C2W_PRIVATE_DIRS_LX` and `C2W_USERPROFILE_LX` expanded and a built-in strap winning over a private one of the same name; and a dry run of every built-in strap at once, from an empty folder, asserting that CMD's command display creates no stray files.
 

@@ -104,6 +104,7 @@ poststraps/
   keychain                  # keychain package or upstream 2.8.5 script; agent starts empty, keys lazy-load
   claude                    # Claude Code, native installer (C2W_CLAUDE_VERSION)
   databricks-ug             # Databricks Unity Gateway (ug, formerly ucode) + Databricks CLI
+  podman-machine            # podman + podman-docker client, default ssh connection to the Windows podman machine, remote = true
 tests/
   run_tests.bat              # test runner with --html, --force, pre-flight checks
   helpers.bat                # assertion library (10 assertion types)

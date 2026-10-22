@@ -1,0 +1,62 @@
+# Use the Windows podman machine from this distro: install the podman client and podman-docker
+# (so "docker" runs podman), copy the machine's ssh key to ~/.ssh/podman-machine, add the
+# machine's ssh connection as the default, and set remote = true in
+# ~/.config/containers/containers.conf, so podman and docker talk to the machine in every shell
+# and script with no environment variables. WSL distros share localhost, so the connection URI
+# that Windows podman uses (ssh://user@127.0.0.1:<port>/...) works here unchanged.
+# Connection: C2W_PODMAN_CONNECTION (e.g. podman-machine-default-root for rootful), else the
+# Windows default. Needs Windows podman with an initialised machine, WSL interop, and
+# passwordless sudo (bootstrap sudo) for the packages. The machine must be running to use it.
+# Bind mounts resolve inside the machine: /mnt/c/... paths work, paths under this distro's
+# /home do not exist there.
+# Also runnable on an existing distro: bash poststraps/podman-machine
+CONN="%C2W_PODMAN_CONNECTION%"
+case "$CONN" in *C2W_PODMAN_CONNECTION*) CONN="$C2W_PODMAN_CONNECTION" ;; esac
+PW=$(command -v podman.exe || ls "/mnt/c/Program Files/RedHat/Podman/podman.exe" 2>/dev/null || true)
+if [ -z "$PW" ]; then echo "[ERROR] podman-machine: Windows podman (podman.exe) not found. Install Podman on Windows and run podman machine init."; exit 1; fi
+if ! sudo -n true 2>/dev/null; then echo "[ERROR] podman-machine: needs passwordless sudo to install podman. Run bootstrap 'sudo' first."; exit 1; fi
+# full paths: a non-root PATH and sudo's secure_path on Alpine both lack /sbin, where apk lives
+APT=$(command -v apt-get || true); APK=$(command -v apk || ls /sbin/apk 2>/dev/null || true)
+if [ -n "$APT" ]; then sudo -n "$APT" update -qq; sudo -n env DEBIAN_FRONTEND=noninteractive "$APT" install -y -qq podman podman-docker openssh-client >/dev/null
+elif [ -n "$APK" ]; then sudo -n "$APK" add --no-cache podman podman-docker openssh-client >/dev/null
+else echo "[ERROR] podman-machine: supports apt and apk only."; exit 1; fi
+# podman-docker prints a notice on every docker call unless this file exists
+sudo -n mkdir -p /etc/containers && sudo -n touch /etc/containers/nodocker
+# WSLg sets XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir, owned by uid 1000. When this user has another
+# uid (the image already had a uid-1000 user, e.g. ubuntu:24.04's "ubuntu") podman refuses to
+# start, even in remote mode. Then /usr/local/bin/podman and docker (ahead of /usr/bin on PATH;
+# podman-docker's docker calls /usr/bin/podman directly) switch to a runtime dir this user owns.
+if [ -n "$XDG_RUNTIME_DIR" ] && [ "$(stat -c %u "$XDG_RUNTIME_DIR" 2>/dev/null)" != "$(id -u)" ]; then
+    printf '%s\n' '#!/bin/sh' '# container2wsl podman-machine: use an XDG_RUNTIME_DIR this user owns (WSLg one is uid 1000)' \
+        'if [ -n "$XDG_RUNTIME_DIR" ] && [ "$(stat -c %u "$XDG_RUNTIME_DIR" 2>/dev/null)" != "$(id -u)" ]; then' \
+        '    XDG_RUNTIME_DIR=/tmp/podman-run-$(id -u); mkdir -p -m 700 "$XDG_RUNTIME_DIR"; export XDG_RUNTIME_DIR' \
+        'fi' 'exec /usr/bin/podman "$@"' | sudo -n tee /usr/local/bin/podman >/dev/null
+    printf '%s\n' '#!/bin/sh' '# container2wsl podman-machine: docker = podman, through the XDG_RUNTIME_DIR fix' 'exec /usr/local/bin/podman "$@"' | sudo -n tee /usr/local/bin/docker >/dev/null
+    sudo -n chmod 755 /usr/local/bin/podman /usr/local/bin/docker
+    echo "podman-machine: XDG_RUNTIME_DIR $XDG_RUNTIME_DIR is not owned by uid $(id -u); added /usr/local/bin/podman and docker wrappers"
+fi
+hash -r
+# the connection as Windows podman sees it: name|uri|identity|default (CRs from the Windows exe)
+"$PW" system connection list --format '{{.Name}}|{{.URI}}|{{.Identity}}|{{.Default}}' 2>/dev/null | tr -d '\r' > "$HOME/.c2w-podman-conns"
+if [ -n "$CONN" ]; then LINE=$(grep "^$CONN|" "$HOME/.c2w-podman-conns" | head -1); else LINE=$(grep '|true$' "$HOME/.c2w-podman-conns" | head -1); fi
+rm -f "$HOME/.c2w-podman-conns"
+if [ -z "$LINE" ]; then echo "[ERROR] podman-machine: no ${CONN:-default} connection in Windows podman (podman system connection list). Run podman machine init on Windows, or set C2W_PODMAN_CONNECTION."; exit 1; fi
+NAME=$(echo "$LINE" | cut -d'|' -f1); URI=$(echo "$LINE" | cut -d'|' -f2); IDW=$(echo "$LINE" | cut -d'|' -f3)
+ID=$(wslpath -u "$IDW")
+mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+# owner-only Windows files show up as another uid under /mnt (see ssh-keys), so fall back to sudo
+if [ -r "$ID" ]; then cat "$ID" > "$HOME/.ssh/podman-machine"; else sudo -n cat "$ID" > "$HOME/.ssh/podman-machine"; fi
+chmod 600 "$HOME/.ssh/podman-machine"
+# drop remote = true first: a duplicate key (see below) makes podman reject the file, connection commands included
+CC="$HOME/.config/containers/containers.conf"
+[ -f "$CC" ] && sed -i '/^[[:space:]]*remote[[:space:]]*=/d' "$CC"
+podman system connection rm "$NAME" >/dev/null 2>&1 || true
+podman system connection add --default --identity "$HOME/.ssh/podman-machine" "$NAME" "$URI"
+# remote = true under [engine]: plain podman (and the docker wrapper) then always use the connection
+# podman rewrites this file (indented keys) on connection add; it holds no remote line at this point
+mkdir -p "$(dirname "$CC")"; touch "$CC"
+if grep -q '^[[:space:]]*\[engine\]' "$CC"; then sed -i '0,/^[[:space:]]*\[engine\]/s//&\nremote = true/' "$CC"
+else printf '\n[engine]\nremote = true\n' >> "$CC"; fi
+echo "podman-machine: $NAME -> $URI (key ~/.ssh/podman-machine, remote = true in $CC)"
+if podman info --format '{{.Host.Hostname}}' >/dev/null 2>&1; then echo "podman-machine: connected, server $(podman version --format '{{.Server.Version}}' 2>/dev/null)"
+else echo "[WARN] podman-machine: configured, but the machine did not answer. Start it on Windows: podman machine start"; fi

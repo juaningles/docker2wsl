@@ -368,6 +368,21 @@ call "%HELPERS%" assert_output_contains "%OUT%" "install -y -qq keychain openssh
 call "%HELPERS%" assert_output_contains "%OUT%" "danielrobbins/keychain/archive/refs/tags" "keychain: upstream script fallback shown"
 call "%HELPERS%" assert_output_contains "%OUT%" "keychain_default_keys" "keychain: key list handled"
 
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m podman-machine built-in poststrap
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_PODMAN_CONNECTION=podman-machine-default-root"
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-pm -p podman-machine > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_PODMAN_CONNECTION="
+call "%HELPERS%" assert_exit_zero "%_RC%" "podman-machine: exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "Poststrap complete" "podman-machine: poststrap complete message"
+call "%HELPERS%" assert_output_contains "%OUT%" "podman podman-docker openssh-client" "podman-machine: podman client and docker wrapper installed"
+call "%HELPERS%" assert_output_contains "%OUT%" "podman-machine-default-root" "podman-machine: C2W_PODMAN_CONNECTION expanded into the script"
+call "%HELPERS%" assert_output_contains "%OUT%" "system connection add --default --identity" "podman-machine: default ssh connection added"
+call "%HELPERS%" assert_output_contains "%OUT%" "remote = true" "podman-machine: containers.conf set to remote"
+call "%HELPERS%" assert_output_contains "%OUT%" "/usr/local/bin/podman" "podman-machine: XDG_RUNTIME_DIR wrapper for a non-1000 uid"
+
 echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m ssh-keys honours C2W_SSH_SOURCE
 call :reset_mocks 2>nul
 :: (no "." in the path: findstr treats a search string with metacharacters as a regex)
