@@ -97,7 +97,8 @@ suite_body() {
   v=$(x 'stat -c %a ~/.ssh ~/.ssh/id_c2x_real | tr "\n" " "'); [ "$v" = "700 600 " ] && ok "$eng: ~/.ssh 700, key 600" || bad "$eng: ~/.ssh 700, key 600" "$v"
   v=$(x 'grep -c "^# ---- from /" ~/.ssh/config'); [ "$v" = 1 ] && ok "$eng: ssh config header names its source folder" || bad "$eng: ssh config header names its source folder" "$(x 'grep "^# ----" ~/.ssh/config')"
   v=$(x 'c2w-manifest'); echo "$v" | grep -q "7 requested, 7 ran: 7 ok, 0 failed" && ok "$eng: c2w-manifest lists 7 straps ok" || bad "$eng: c2w-manifest lists 7 straps ok" "$v"
-  if [ "$eng" = apple ]; then v=$(container run --rm --entrypoint /bin/sh "$img" -c 'id -un' 2>&1)
+  # Apple's run prints "[n/6] ..." progress lines too: keep only the command's last output line
+  if [ "$eng" = apple ]; then v=$(container run --rm --entrypoint /bin/sh "$img" -c 'id -un' 2>&1 | grep -v '^\[[0-9]/[0-9]\]' | tail -1)
   else v=$("$E" run --rm --entrypoint /bin/sh "$img" -c 'id -un' 2>&1); fi
   [ "$v" = tester ] && ok "$eng: committed image starts as tester" || bad "$eng: committed image starts as tester" "$v"
   C2X_RUN_ROOT="$tmp/run" C2W_LOCATION="$tmp/records" bash "$C2X" "$IMAGE" --engine "$eng" ${arch[@]+"${arch[@]}"} -n "$name" > "$out" 2>&1
