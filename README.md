@@ -1,6 +1,8 @@
 # container2wsl
 
-Create a WSL distribution from any Docker image, in one command.
+Create a WSL distribution from any Docker image, in one command. The same straps can also build a
+running container instead: `--target container` on Windows, or `container2x.sh` on macOS and Linux
+with docker, podman or Apple's `container` (see [Container targets](#container-targets)).
 
 ## Requirements
 
@@ -43,6 +45,8 @@ Options:
   --poststrap, -p <file>  Run commands from file as user after setup (repeatable)
   --private <dir>         Private overlay folder (repeatable; see Private overlays)
   --force,    -f          Overwrite existing WSL distro with same name
+  --target <wsl|container>  WSL distro (default, or C2W_TARGET) or a running container
+  --commit <image:tag>    Container target: also save the result as an image
   --dry-run               Parse and print config, do not execute
   --help,     -h          Show help
 ```
@@ -250,6 +254,43 @@ A `--force` rebuild keeps the previous Windows copy as `container2wsl-manifest.p
 
 The manifest needs `lib\manifest.ps1` next to `container2wsl.bat`. Without it the script still works on its own; the banner says `Manifest : off` and nothing is recorded. Writing the manifest never fails a build: a problem only prints a `[WARN]`.
 
+## Container targets
+
+The straps, private overlays, recipes and manifest also build a **running container**, for when a
+WSL distro is not what you want (CI, a Mac, a throwaway environment, an image to share).
+[docs/RUNNERS.md](docs/RUNNERS.md) is the contract all three runners keep.
+
+**Windows** (docker or podman, e.g. through devtools' `docker.bat` shim):
+
+```cmd
+container2wsl.bat ubuntu:24.04 --target container -n dev -u alice ^
+  -b sudo -b devtools -b k8s-tools -p uv -p devtools-shell -p devtools-overlay -p ssh-keys ^
+  --commit localhost/dev:1
+podman exec -it -u alice -w /home/alice dev bash -l
+```
+
+**macOS and Linux** (`container2x.sh`, bash 3.2 or later): the same options plus `--engine` and
+`--arch`. On a Mac with [Apple's container](https://github.com/apple/container) installed and
+started (`container system start`) it is the default engine; otherwise podman, then docker.
+
+```bash
+./container2x.sh ubuntu:24.04 -n dev -u alice -b sudo -b devtools -b k8s-tools \
+  -p uv -p devtools-shell -p devtools-overlay -p ssh-keys --commit localhost/dev:1
+container exec -it -u alice -w /home/alice dev bash -l      # Apple; podman/docker exec likewise
+```
+
+How it works: the container starts with `sleep infinity` as its entrypoint, the user is created,
+and every strap runs through `<engine> exec`. Host folders the straps read (this repo, the
+`devtools` clone next to it, the private overlays, `C2W_SSH_SOURCE`) are bind-mounted at the path
+the straps already use. The result keeps running; `--commit` also saves it as an image whose default
+command is the user's login shell (bind mounts are not part of the image). `--force` replaces an
+existing container of the same name. Straps that only make sense in WSL (`systemd-enable`,
+`podman-machine`) skip themselves.
+
+Recipes work for both: `rebuild-wsl NAME --target container` on Windows, and devtools'
+`rebuild-container NAME` on macOS / Linux. Recipe keys `target=`, `commit=`, `engine=` and
+`arch=` set the defaults.
+
 ## Testing
 
 The test suite uses mock `docker` and `wsl` commands so it can run without Docker or real WSL imports.
@@ -270,6 +311,15 @@ Test distro names are randomized (`c2wt<random>-*`) to avoid collisions. If left
 ```cmd
 tests\run_tests.bat --force
 ```
+
+`container2x.sh` has its own suite, run from macOS or Linux (WSL works):
+
+```bash
+tests/sh/run.sh           # mock engines for docker, podman and Apple container: fast, no engine needed
+tests/sh/run.sh --real    # then real builds with every engine that works here; the others print SKIP
+```
+
+The real suite is how the Apple engine is verified: run it on a Mac with Apple's container CLI.
 
 ## License
 

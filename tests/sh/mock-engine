@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# tests/sh/mock-engine - fake docker / podman / Apple container CLI for tests/sh/run.sh.
+# Installed under those three names in a temp bin folder; behaves by the name it is called as.
+# Every call is appended to $C2X_MOCK_LOG as "<name> <args>". Control variables:
+#   C2X_MOCK_IMAGE_EXISTS=1   image inspect succeeds (default 1)
+#   C2X_MOCK_EXISTS=1         the container already exists (default 0)
+#   C2X_MOCK_RUN_FAIL=1       run fails
+#   C2X_MOCK_STRAP_FAIL=1     exec "bash <script>" fails (a strap fails)
+#   C2X_MOCK_COMMIT_FAIL=1    commit fails
+#   C2X_MOCK_BUILD_FAIL=1     build fails (Apple commit fallback)
+#   C2X_MOCK_SCRIPTS=DIR      copy every script run through exec into DIR
+#   C2X_MOCK_SHELL=/bin/x     login shell reported by "getent passwd" (default /usr/bin/zsh)
+me=$(basename "$0")
+[ -n "${C2X_MOCK_LOG:-}" ] && printf '%s %s\n' "$me" "$*" >> "$C2X_MOCK_LOG"
+case "$1" in
+  --version) echo "mock-$me version 0.0"; exit 0 ;;
+  info) exit 0 ;;
+  pull) exit 0 ;;
+  image)
+    case "$2" in
+      inspect) [ "${C2X_MOCK_IMAGE_EXISTS:-1}" = 1 ]; exit $? ;;
+      *) exit 0 ;;   # pull, tag, delete
+    esac ;;
+  container) [ "${C2X_MOCK_EXISTS:-0}" = 1 ]; exit $? ;;   # docker/podman "container inspect"
+  list) [ "${C2X_MOCK_EXISTS:-0}" = 1 ] && echo "${C2X_MOCK_NAME:-}"; exit 0 ;;   # apple "list --all --quiet"
+  rm|delete) exit 0 ;;
+  run) [ "${C2X_MOCK_RUN_FAIL:-0}" = 1 ] && { echo "mock run failed" >&2; exit 1; }; echo mock-id-123; exit 0 ;;
+  commit) [ "${C2X_MOCK_COMMIT_FAIL:-0}" = 1 ] && { echo "mock commit failed" >&2; exit 1; }; exit 0 ;;
+  build) [ "${C2X_MOCK_BUILD_FAIL:-0}" = 1 ] && exit 1; exit 0 ;;
+  exec)
+    shift; [ "$1" = -u ] && shift 2; shift   # drop -u USER and the container name
+    case "$1" in
+      bash)
+        [ -n "${C2X_MOCK_SCRIPTS:-}" ] && cp "$2" "$C2X_MOCK_SCRIPTS/"
+        [ "${C2X_MOCK_STRAP_FAIL:-0}" = 1 ] && { echo "mock strap failed"; exit 1; }
+        echo "mock ran $(basename "$2")"; exit 0 ;;
+      getent) echo "$3:x:1000:1000::/home/$3:${C2X_MOCK_SHELL:-/usr/bin/zsh}"; exit 0 ;;
+      *) exit 0 ;;   # useradd, usermod, id, install, sh -c
+    esac ;;
+  *) echo "mock-$me: unhandled: $*" >&2; exit 0 ;;
+esac

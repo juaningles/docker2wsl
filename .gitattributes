@@ -4,3 +4,6 @@ lib/c2w-manifest text eol=lf
 # fails on the CRs. container2wsl strips CRs when it renders them, so builds work either way.
 bootstraps/* text eol=lf
 poststraps/* text eol=lf
+# The POSIX runner and its tests run on macOS / Linux as-is.
+container2x.sh text eol=lf
+tests/sh/* text eol=lf

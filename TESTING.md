@@ -145,11 +145,71 @@ Distros are stored under `%C2W_TMPDIR%\store`; `tests\manifest_summary.ps1` pars
 | Dry run | `--dry-run` | banner names the manifest, nothing written |
 | No helper | copy of the script without `lib\` | builds, banner says `Manifest : off`, no warnings, nothing written |
 
+### `test_07_container.bat` — Container target (MOCKED docker)
+
+`--target container`: option validation (`--target bogus`, `--commit` without the container
+target), the dry-run plan and mount list, `C2W_TARGET` as the default, a build that must call
+`docker run -d --name ... --entrypoint sleep -v ...`, `docker exec -u root` for bootstraps and
+`-u USER` for poststraps and never wsl, an existing container (refused, `--force` replaces), `--commit`
+(`ENTRYPOINT []` reset), run and commit failures, and `systemd-enable` / `podman-machine` skipping
+themselves.
+
+### `tests/sh/` — container2x.sh (macOS / Linux)
+
+```bash
+tests/sh/run.sh            # mock suite: 80 checks, every engine, no engine installed needed
+tests/sh/run.sh --real     # mock suite, then tests/sh/real.sh
+bash tests/sh/real.sh podman   # real builds for one engine only
+```
+
+`run.sh` puts `tests/sh/mock-engine` on PATH as `docker`, `podman` and `container`; it logs every
+call. It covers arguments, rendering (expanded `%C2W_*%`, untouched undefined `%NAME%` and `%%`,
+dropped comments), overlay strap lookup, the run/exec/commit command lines per engine (Apple: `list
+--all --quiet`, `--arch`, no `--hostname`, `delete --force`, commit then build, and the fallback when
+build fails), existing containers, failures, the manifest (read back with `lib/c2w-manifest`), and
+the ssh folder mode check. Run it under bash 3.2 as well, since that is what macOS ships:
+
+```cmd
+podman run --rm -v C:\code\docker2wsl:/src:ro docker.io/library/bash:3.2 bash -c "cp -r /src /w && cd /w && bash tests/sh/run.sh"
+```
+
+`real.sh` builds `c2x-real-<engine>` from `ubuntu:24.04` with `-b sudo -b devtools -b k8s-tools
+-p uv -p devtools-shell -p devtools-overlay -p ssh-keys`, a throwaway overlay (git repo, shell file,
+test key pair) and `--commit`, then checks inside: the user and passwordless sudo, kubectl and helm,
+devtools installed and the overlay linked, `~/.ssh` 700 with the key 600, the ssh config header
+naming its source, `c2w-manifest` reporting 7 of 7 straps ok, the committed image starting as the
+user, a second build without `--force` refusing, and `--force` rebuilding. Containers, images and
+scratch files (`tests/sh/.real-tmp`, gitignored) are removed afterwards, also on failure.
+
+An engine that cannot run prints `SKIP <engine>: <reason>` and does not fail the run:
+
+| engine | runs when |
+|---|---|
+| apple | macOS, the `container` CLI installed, and `container system status` answers |
+| podman | `podman info` answers (local or remote) |
+| docker | `docker info` answers and `docker` is not podman-docker |
+
+### macOS / Apple container
+
+On a Mac (Apple silicon, macOS 26 recommended), after `git pull`:
+
+```bash
+container system start          # once per boot, if it is not running
+cd docker2wsl && tests/sh/run.sh --real
+```
+
+Expect the mock suite to pass and `real: apple`, all checks PASS, with `arm64 userland` among
+them. The Apple engine has only been exercised with mocks so far, so this run is its first real
+test. If `--commit` falls back (the `container build` step fails), the image keeps the `sleep`
+entrypoint and the "committed image starts as tester" check fails. A failed build prints the last
+lines of its log under the FAIL line; for more, rerun one engine with
+`bash -x tests/sh/real.sh apple`.
+
 ## Mock Details
 
 ### `tests\mocks\docker.bat`
 
-Simulates `docker image inspect`, `docker pull`, `docker create`, `docker export`, and `docker rm`. Behavior is controlled by environment variables:
+Simulates `docker image inspect`, `docker pull`, `docker create`, `docker export`, `docker rm`, and for the container target `docker container inspect`, `run`, `exec`, `commit` and `--version`. Behavior is controlled by environment variables:
 
 | Variable | Default | Effect |
 |----------|---------|--------|
@@ -160,6 +220,10 @@ Simulates `docker image inspect`, `docker pull`, `docker create`, `docker export
 | `C2W_MOCK_EXPORT_FAIL` | `0` | `1` = `docker export` returns error |
 | `C2W_MOCK_CONTAINER_ID` | `mock-container-abc123` | ID echoed by `docker create` |
 | `C2W_MOCK_LOG` | (unset) | Path to log file recording all mock calls |
+| `C2W_MOCK_CT_EXISTS` | `0` | `1` = `docker container inspect` finds the container |
+| `C2W_MOCK_RUN_FAIL` | `0` | `1` = `docker run` returns error |
+| `C2W_MOCK_EXEC_FAIL` | `0` | `1` = `docker exec` returns error |
+| `C2W_MOCK_COMMIT_FAIL` | `0` | `1` = `docker commit` returns error |
 
 On `docker export`, the mock creates an empty file at the output path (simulating a tar).
 

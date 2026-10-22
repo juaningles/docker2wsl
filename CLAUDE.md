@@ -17,6 +17,18 @@ The main script runs 4-6 sequential steps via `call :subroutine` labels:
 5. `wsl_bootstrap` (optional) - run bootstrap file commands as root
 6. `wsl_poststrap` (optional) - run poststrap file commands as user
 
+**Container target** (`--target container`, `:ct_*` labels): steps 2-3 become `:ct_flow`
+(`<engine> run -d --entrypoint sleep ... infinity` with bind mounts, then useradd/usermod), and the
+run jumps back to the shared `:after_target_setup`. Every command into the target goes through the
+`%T_ROOT%` / `%T_USER%` prefixes (`wsl -d NAME -u X --` or `<docker> exec -u X NAME`), set once in
+`:main`; do not call `%WSL_CMD% -d` directly in shared code. `:ct_add_mount` mounts each host folder
+at its `:win2lx` path so `*_LX` variables mean the same in both targets. `:ct_finish` commits
+(`--change` resets the sleep entrypoint) and leaves the container running.
+`container2x.sh` is the macOS/Linux runner for the same straps (docker, podman, Apple `container`);
+it must stay bash 3.2 compatible (macOS `/bin/bash`): no associative arrays, `mapfile`, `${x^}`,
+and guard empty arrays under `set -u` with `${a[@]+"${a[@]}"}`. docs/RUNNERS.md is the contract both
+keep (rendering rules, variables, mounts, manifest).
+
 Manifest (`:manifest`, `:manifest_strap`, `:manifest_complete`, plus `lib\manifest.ps1`):
 `create` is written after step 4, a `strap` record after each strap (pass or fail), and
 `complete` at the end or when a strap fails. The batch side passes **all** data to
@@ -58,7 +70,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (322 assertions)
+tests\run_tests.bat                        # run all (369 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -73,13 +85,20 @@ tests\run_tests.bat --force                # skip collision pre-check
 - `test_04_bootstrap` tests bootstrap execution (mocked)
 - `test_05_poststrap` tests poststrap execution (mocked)
 - `test_06_manifest` tests the build manifest (mocked; `manifest_summary.ps1` parses the JSON Lines)
+- `test_07_container` tests `--target container` (mocked docker; the wsl mock must never be called)
+- `tests/sh/run.sh` (bash, run from WSL/Linux/macOS) tests `container2x.sh` with `tests/sh/mock-engine`;
+  run it under bash 3.2 too: `podman run --rm -v C:\code\docker2wsl:/src:ro docker.io/library/bash:3.2 bash -c 'cp -r /src /w && cd /w && bash tests/sh/run.sh'`
+- `tests/sh/real.sh` does real builds; the Apple suite only runs on a Mac, so a real Apple run is
+  something the user does after pulling (`tests/sh/run.sh --real`)
 - Assertion helpers use `setlocal enabledelayedexpansion` + flat `if/goto` to avoid block-parsing bugs
 - ANSI colors in output: green PASS, red FAIL, yellow test headers, cyan file names
 
 ## File Layout
 
 ```
-container2wsl.bat            # main script (works alone)
+container2wsl.bat            # main script (works alone): WSL distro, or --target container
+container2x.sh               # macOS/Linux runner: running container via docker, podman or Apple container
+docs/RUNNERS.md              # the contract both runners keep (rendering, variables, mounts, manifest)
 lib/
   manifest.ps1               # optional: build manifest (JSON Lines) writer
   ssh-source-check.ps1       # Windows ACL check for ssh-keys sources (owner/SYSTEM/Administrators only)
@@ -114,6 +133,10 @@ tests/
   test_04_bootstrap.bat      # bootstrap feature tests (mocked)
   test_05_poststrap.bat      # poststrap feature tests (mocked)
   test_06_manifest.bat       # build manifest tests (mocked)
+  test_07_container.bat      # --target container tests (mocked docker; no wsl calls allowed)
+  sh/run.sh                  # container2x.sh mock suite (bash 3.2+); --real adds sh/real.sh
+  sh/real.sh                 # real container2x.sh builds per engine; SKIP where an engine is missing
+  sh/mock-engine             # fake docker / podman / container CLI (behaves by the name it is called as)
   manifest_summary.ps1       # parses a manifest into key=value lines for asserts
   mocks/
     docker.bat               # mock docker (controlled via C2W_MOCK_* vars)

@@ -30,3 +30,6 @@ __pycache__/
 
 # Ignore all distros created by tests
 c2wt*
+
+# scratch folder of tests/sh/real.sh (throwaway overlay, keys, run folders)
+tests/sh/.real-tmp/
