@@ -29,7 +29,7 @@
 set -euo pipefail
 VERSION=1.0.0
 SELF="$0"; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case "$L" in /*) SELF="$L" ;; *) SELF="$(dirname "$SELF")/$L" ;; esac; done
-SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd -P)
+SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd)
 ARGV="$*"; CWD=$(pwd)
 
 say()  { printf '%s\n' "$*"; }
@@ -50,9 +50,9 @@ while [ $# -gt 0 ]; do
     -n|--name) need "$@"; NAME="$2"; shift ;;
     -u|--user) need "$@"; USER_NAME="$2"; shift ;;
     -l|--location) need "$@"; LOCATION="$2"; shift ;;
-    -b|--bootstrap) need "$@"; BOOT_REQ+=("$2"); shift ;;
-    -p|--poststrap) need "$@"; POST_REQ+=("$2"); shift ;;
-    --private) need "$@"; [ -d "$2" ] || die "--private folder not found: $2"; PRIV_ARG+=("$(cd "$2" && pwd -P)"); shift ;;
+    -b|--bootstrap) need "$@"; BOOT_REQ[${#BOOT_REQ[@]}]="$2"; shift ;;
+    -p|--poststrap) need "$@"; POST_REQ[${#POST_REQ[@]}]="$2"; shift ;;
+    --private) need "$@"; [ -d "$2" ] || die "--private folder not found: $2"; PRIV_ARG[${#PRIV_ARG[@]}]="$(cd "$2" && pwd)"; shift ;;
     --engine) need "$@"; ENGINE="$2"; shift ;;
     --arch) need "$@"; ARCH="$2"; shift ;;
     --commit) need "$@"; COMMIT="$2"; shift ;;
@@ -119,14 +119,19 @@ e_commit() {   # $1 = login shell of the user
 
 # ---------------------------------------------------------------- private folders and straps
 PRIV=()
-add_priv() { local d; d=$(cd "$1" && pwd -P) || return 0; local x; for x in ${PRIV[@]+"${PRIV[@]}"}; do [ "$x" = "$d" ] && return 0; done; PRIV+=("$d"); }
+add_priv() {
+  local d x
+  d=$(cd "$1" 2>/dev/null && pwd) || return 0
+  for x in ${PRIV[@]+"${PRIV[@]}"}; do [ "$x" = "$d" ] && return 0; done
+  PRIV[${#PRIV[@]}]="$d"
+}
 if [ ${#PRIV_ARG[@]} -gt 0 ]; then for d in "${PRIV_ARG[@]}"; do add_priv "$d"; done
 elif [ -n "${C2W_PRIVATE_DIRS:-}" ]; then IFS=: read -r -a _pd <<< "$C2W_PRIVATE_DIRS"; for d in "${_pd[@]}"; do [ -d "$d" ] && add_priv "$d"; done
 else for d in "$SCRIPT_DIR"/../*/; do [ -f "$d.devtools-overlay" ] && add_priv "$d"; done; fi
 
 resolve() {   # $1 = strap as given, $2 = bootstraps|poststraps; prints the file or fails
   local s="$1" k="$2" d
-  if [ -f "$s" ]; then (cd "$(dirname "$s")" && printf '%s/%s\n' "$(pwd -P)" "$(basename "$s")"); return; fi
+  if [ -f "$s" ]; then (cd "$(dirname "$s")" && printf '%s/%s\n' "$(pwd)" "$(basename "$s")"); return; fi
   for d in "$SCRIPT_DIR/$k/$s" "$SCRIPT_DIR/$s"; do [ -f "$d" ] && { printf '%s\n' "$d"; return; }; done
   for d in ${PRIV[@]+"${PRIV[@]}"}; do
     [ -f "$d/straps/$s" ] && { printf '%s\n' "$d/straps/$s"; return; }
@@ -134,8 +139,8 @@ resolve() {   # $1 = strap as given, $2 = bootstraps|poststraps; prints the file
   done
   return 1
 }
-for r in ${BOOT_REQ[@]+"${BOOT_REQ[@]}"}; do f=$(resolve "$r" bootstraps) || die "Bootstrap not found: $r"; BOOT+=("$f"); done
-for r in ${POST_REQ[@]+"${POST_REQ[@]}"}; do f=$(resolve "$r" poststraps) || die "Poststrap not found: $r"; POST+=("$f"); done
+for r in ${BOOT_REQ[@]+"${BOOT_REQ[@]}"}; do f=$(resolve "$r" bootstraps) || die "Bootstrap not found: $r"; BOOT[${#BOOT[@]}]="$f"; done
+for r in ${POST_REQ[@]+"${POST_REQ[@]}"}; do f=$(resolve "$r" poststraps) || die "Poststrap not found: $r"; POST[${#POST[@]}]="$f"; done
 
 # ---------------------------------------------------------------- variables the straps see
 join() { local IFS="$1"; shift; printf '%s' "$*"; }
@@ -147,7 +152,12 @@ export C2W_PRIVATE_DIRS_LX="$C2W_PRIVATE_DIRS"
 
 # ---------------------------------------------------------------- mounts
 MOUNTS=()
-add_mount() { local d; d=$(cd "$1" 2>/dev/null && pwd -P) || return 0; local x; for x in ${MOUNTS[@]+"${MOUNTS[@]}"}; do [ "$x" = "$d" ] && return 0; done; MOUNTS+=("$d"); }
+add_mount() {
+  local d x
+  d=$(cd "$1" 2>/dev/null && pwd) || return 0
+  for x in ${MOUNTS[@]+"${MOUNTS[@]}"}; do [ "$x" = "$d" ] && return 0; done
+  MOUNTS[${#MOUNTS[@]}]="$d"
+}
 add_mount "$SCRIPT_DIR"
 [ -d "$SCRIPT_DIR/../devtools" ] && add_mount "$SCRIPT_DIR/../devtools"
 for d in ${PRIV[@]+"${PRIV[@]}"}; do add_mount "$d"; done
@@ -268,7 +278,7 @@ fi
 
 # ---------------------------------------------------------------- build
 RUN_ROOT="${C2X_RUN_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/container2x}"
-mkdir -p "$RUN_ROOT"; RUN_DIR=$(cd "$(mktemp -d "$RUN_ROOT/run.XXXXXX")" && pwd -P)
+mkdir -p "$RUN_ROOT"; RUN_DIR=$(cd "$(mktemp -d "$RUN_ROOT/run.XXXXXX")" && pwd)
 trap 'rm -rf "$RUN_DIR"' EXIT
 add_mount "$RUN_DIR"
 BUILD_TIME=$(now); BUILD_T0=$(epoch); PULLED=false
