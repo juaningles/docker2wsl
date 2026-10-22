@@ -6,9 +6,15 @@ with docker, podman or Apple's `container` (see [Container targets](#container-t
 
 ## Requirements
 
+For a WSL distro (`container2wsl.bat`):
+
 - Windows 10/11 with [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) enabled
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker CLI) running
-- Run from an **elevated** (Administrator) Command Prompt
+- A container engine to fetch the image: Docker (Desktop or CLI), or podman with a `docker` shim such as
+  devtools' `docker.bat` (its machine must be running)
+- Run from an **elevated** (Administrator) Command Prompt or PowerShell
+
+For a container instead (`--target container` on Windows, `container2x.sh` on macOS / Linux): just the
+engine, docker, podman or Apple's `container`, plus bash 3.2 or later on macOS / Linux.
 
 ## Quick Start
 
@@ -201,7 +207,7 @@ A private overlay is a folder (usually a private git repo) with your own aliases
 
 1. `--private DIR` on the command line (repeatable);
 2. `C2W_PRIVATE_DIRS`, a `;`-separated list;
-3. every sibling folder of the container2wsl clone that contains an empty `.devtools-overlay` marker file, in name order. Clone `devtools-private` and `devtools-unisys` next to `docker2wsl` and nothing needs configuring.
+3. every sibling folder of the container2wsl clone that contains an empty `.devtools-overlay` marker file, in name order. Clone your overlays (say `devtools-private` and `devtools-work`) next to `docker2wsl` and nothing needs configuring.
 
 What they get you: `-p devtools-overlay` installs each one into the distro; a bare strap name also resolves from each folder's `straps\`, `bootstraps\` and `poststraps\`; the `ssh-keys` poststrap reads their `ssh\` folders; and the build manifest records their paths and git commits. Straps kept anywhere else are still passed by path: `-p D:\somewhere\my-strap`.
 

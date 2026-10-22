@@ -145,7 +145,7 @@ Distros are stored under `%C2W_TMPDIR%\store`; `tests\manifest_summary.ps1` pars
 | Dry run | `--dry-run` | banner names the manifest, nothing written |
 | No helper | copy of the script without `lib\` | builds, banner says `Manifest : off`, no warnings, nothing written |
 
-### `test_07_container.bat` — Container target (MOCKED docker)
+### `test_07_container.bat` â€” Container target (MOCKED docker)
 
 `--target container`: option validation (`--target bogus`, `--commit` without the container
 target), the dry-run plan and mount list, `C2W_TARGET` as the default, a build that must call
@@ -154,7 +154,7 @@ target), the dry-run plan and mount list, `C2W_TARGET` as the default, a build t
 (`ENTRYPOINT []` reset), run and commit failures, and `systemd-enable` / `podman-machine` skipping
 themselves.
 
-### `test_08_recipe.bat` — Recipes (--dry-run, NO MOCKS)
+### `test_08_recipe.bat` â€” Recipes (--dry-run, NO MOCKS)
 
 `--recipes` lists recipes from `--private` folders; `--recipe NAME` applies `user=`, `bootstraps=`,
 `poststraps=`, names the build after the file, and ignores `commit=` for a WSL build; command line
@@ -164,7 +164,7 @@ path works; a missing recipe, a recipe without `image=` and a missing path fail 
 `rebuild-wsl.bat` wrapper lists with no arguments and forwards a recipe plus overrides; the built-in
 `recipes\default.conf` is listed and builds, and an overlay's `default.conf` replaces it.
 
-### `tests/sh/` — container2x.sh (macOS / Linux)
+### `tests/sh/` â€” container2x.sh (macOS / Linux)
 
 ```bash
 tests/sh/run.sh            # mock suite: 108 checks, every engine, no engine installed needed

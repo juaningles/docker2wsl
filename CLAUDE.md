@@ -170,4 +170,19 @@ tests/
 | `C2W_MOCK_WSL_BASH_FAIL` | 0 | 1 = wsl bash commands fail |
 | `C2W_MOCK_WSL_DISTRO_EXISTS` | (unset) | name to report as existing in wsl --list --quiet |
 | `C2W_MOCK_CONTAINER_ID` | mock-container-abc123 | ID returned by docker create |
+| `C2W_MOCK_CT_EXISTS` | 0 | 1 = docker container inspect finds the container (container target) |
+| `C2W_MOCK_RUN_FAIL` | 0 | 1 = docker run fails |
+| `C2W_MOCK_EXEC_FAIL` | 0 | 1 = docker exec fails |
+| `C2W_MOCK_COMMIT_FAIL` | 0 | 1 = docker commit fails |
 | `C2W_MOCK_LOG` | (unset) | path to log file for mock calls |
+
+`tests/sh/mock-engine` (installed as `docker`, `podman` and `container` for `tests/sh/run.sh`; behaves by the name it is called as):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `C2X_MOCK_LOG` | (unset) | every call appended as `<name> <args>` |
+| `C2X_MOCK_IMAGE_EXISTS` | 1 | 0 = image inspect fails (triggers a pull) |
+| `C2X_MOCK_EXISTS` | 0 | 1 = the container already exists (`C2X_MOCK_NAME` is what Apple `list` prints) |
+| `C2X_MOCK_RUN_FAIL`, `C2X_MOCK_STRAP_FAIL`, `C2X_MOCK_COMMIT_FAIL`, `C2X_MOCK_BUILD_FAIL` | 0 | 1 = that step fails (`BUILD` is Apple's commit fallback) |
+| `C2X_MOCK_SCRIPTS` | (unset) | folder that receives a copy of every rendered script run through exec |
+| `C2X_MOCK_SHELL` | /usr/bin/zsh | login shell reported by `getent passwd` |
