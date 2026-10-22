@@ -259,8 +259,11 @@ The manifest needs `lib\manifest.ps1` next to `container2wsl.bat`. Without it th
 ## Recipes
 
 A recipe saves a build's options in a file, so `rebuild-wsl zdev` replaces a long command line. Recipes
-live in the `recipes/` folder of a private overlay, one `<name>.conf` each, and container2wsl finds
-them in the same overlay folders it detects for the build (see [Private overlays](#private-overlays)).
+are `<name>.conf` files in a `recipes/` folder: this repo's own (samples) and each private overlay's,
+found in the same overlay folders container2wsl detects for the build (see
+[Private overlays](#private-overlays)). This repo ships `recipes/default.conf`, a general dev box from
+stock Ubuntu with the public straps only, so `rebuild-wsl default -n mydev -u alice` works on any
+machine. Copy a sample into an overlay to change it.
 
 ```cmd
 container2wsl.bat --recipes                          :: list them (name, overlay, image)
@@ -288,8 +291,9 @@ Format: `key=value` lines, no spaces around `=`, comments on their own line star
 | `extra` | other arguments, passed as written |
 
 The recipe becomes arguments placed before the ones on the command line, so the command line wins.
-When two overlays have a recipe of the same name, the one listed last wins (name order for detected
-siblings, like overlay aliases). The build manifest records which recipe was used.
+When two folders have a recipe of the same name, the one searched last wins: this repo's `recipes/`
+first, then the overlays in name order (like overlay aliases), so an overlay's `default.conf` replaces
+the sample. The build manifest records which recipe was used.
 
 ## Container targets
 

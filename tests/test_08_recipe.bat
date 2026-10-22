@@ -81,6 +81,20 @@ set "_RC=%errorlevel%"
 call "%HELPERS%" assert_exit_nonzero "%_RC%" "recipe-badpath: non-zero exit"
 call "%HELPERS%" assert_output_contains "%OUT%" "Recipe file not found" "recipe-badpath: message"
 
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m built-in recipes (docker2wsl\recipes)
+call "%SCRIPT%" --recipes --private "%_OA%" > "%OUT%" 2>&1
+call "%HELPERS%" assert_output_contains "%OUT%" "default  (docker2wsl)" "builtin: default sample listed from docker2wsl"
+call "%SCRIPT%" --recipe default --private "%_OA%" --dry-run > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "builtin: --recipe default exit 0"
+call "%HELPERS%" assert_output_contains "%OUT%" "recipes\default.conf" "builtin: default.conf used"
+call "%HELPERS%" assert_output_contains "%OUT%" "Image    : docker.io/library/ubuntu:24.04" "builtin: its image applied"
+call "%HELPERS%" assert_output_contains "%OUT%" "poststraps\devtools-overlay" "builtin: its straps resolve"
+(echo image=busybox:1.36) > "%_OB%\recipes\default.conf"
+call "%SCRIPT%" --recipe default --private "%_OB%" --dry-run > "%OUT%" 2>&1
+call "%HELPERS%" assert_output_contains "%OUT%" "Image    : busybox:1.36" "builtin: an overlay recipe of the same name wins"
+del /f /q "%_OB%\recipes\default.conf" >nul 2>&1
+
 echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m rebuild-wsl wrapper
 call "%WRAP%" --private "%_OA%" > "%OUT%" 2>&1
 call "%HELPERS%" assert_output_contains "%OUT%" "No recipe" "wrapper: a first argument that is not a recipe name is reported"

@@ -30,8 +30,9 @@ and guard empty arrays under `set -u` with `${a[@]+"${a[@]}"}`. docs/RUNNERS.md 
 keep (rendering rules, variables, mounts, manifest).
 
 **Recipes** (`--recipe NAME`, `--recipes`; `:recipe_*` labels, run before anything else):
-`:recipe_scan` splits the command line, `:recipe_run` finds `<overlay>\recipes\NAME.conf`
-(`:recipe_dirs`: `--private`, else `C2W_PRIVATE_DIRS`, else marked siblings; the last match wins),
+`:recipe_scan` splits the command line, `:recipe_run` finds `recipes\NAME.conf` (`:recipe_dirs`:
+this repo first, for the samples in `recipes\`, then `--private`, else `C2W_PRIVATE_DIRS`, else
+marked siblings; the last match wins, so an overlay recipe replaces a sample of the same name),
 turns the keys into arguments, and calls the script again with those first and the user's after, so
 the command line wins. The recipe path reaches the inner run as `_C2W_FROM_RECIPE` (cleared at the
 top, kept as `C2W_RECIPE` for the manifest). container2x.sh does the same with
@@ -78,7 +79,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (396 assertions)
+tests\run_tests.bat                        # run all (402 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -108,6 +109,8 @@ tests\run_tests.bat --force                # skip collision pre-check
 container2wsl.bat            # main script (works alone): WSL distro, or --target container
 container2x.sh               # macOS/Linux runner: running container via docker, podman or Apple container
 rebuild-wsl.bat              # shorthand: container2wsl.bat --recipe NAME (alone: --recipes)
+recipes/
+  default.conf               # sample recipe: stock Ubuntu + public straps; an overlay's default.conf replaces it
 rebuild-container            # shorthand: container2x.sh --recipe NAME (alone: --recipes)
 docs/RUNNERS.md              # the contract both runners keep (rendering, variables, mounts, manifest)
 lib/

@@ -60,8 +60,8 @@ and `$(id -un)`, not `$USER`.
 `/etc/container2wsl/straps/`, and a copy on the host under `C2W_LOCATION/NAME/`. `c2w-manifest`
 reads both kinds. Container records add `distro.target`, `distro.engine` and `distro.commit`.
 
-**Recipes.** `--recipe NAME` (both runners) reads `<private overlay>/recipes/NAME.conf` from the
-same overlay folders the build detects, turns it into arguments placed before the command line's,
+**Recipes.** `--recipe NAME` (both runners) reads `recipes/NAME.conf` from this repo (the samples,
+such as `default`) and then from the same overlay folders the build detects (a later match wins), turns it into arguments placed before the command line's,
 and runs the runner again with them. Keys and rules: README "Recipes". `rebuild-wsl.bat` and
 `rebuild-container` in the repo root are shorthands for `--recipe`. The manifest records the recipe
 as `command.recipe`.

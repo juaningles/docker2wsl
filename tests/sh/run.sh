@@ -168,6 +168,16 @@ c2x --recipe dev --private "$RA" --engine docker -n r1
 rc0 $? "recipe build: exit 0"
 sh "$ROOT/lib/c2w-manifest" -f "$TMP/records/r1/container2wsl-manifest.jsonl" > "$TMP/report.txt" 2>&1
 has "$TMP/report.txt" "Recipe    $RA/recipes/dev.conf" "recipe build: manifest records the recipe"
+c2x --recipes --private "$RA"
+has "$OUT" "default      ($(basename "$ROOT"))" "builtin: default sample listed from this repo's recipes/"
+c2x --recipe default --private "$RA" --engine docker --dry-run; rc0 $? "builtin: --recipe default exit 0"
+has "$OUT" "container2x: recipe $ROOT/recipes/default.conf" "builtin: default.conf used"
+has "$OUT" "Poststrap: $ROOT/poststraps/devtools-overlay" "builtin: its straps resolve"
+printf 'image=busybox:1.36
+' > "$RB/recipes/default.conf"
+c2x --recipe default --private "$RB" --engine docker --dry-run
+has "$OUT" "Image    : busybox:1.36" "builtin: an overlay recipe of the same name wins"
+rm -f "$RB/recipes/default.conf"
 C2W_PRIVATE_DIRS="$RA" bash "$ROOT/rebuild-container" > "$OUT" 2>&1
 has "$OUT" "dev          (rcp_a)" "rebuild-container: no arguments lists the recipes"
 C2W_PRIVATE_DIRS="$RA" bash "$ROOT/rebuild-container" dev -n w1 --dry-run > "$OUT" 2>&1

@@ -37,7 +37,7 @@ setlocal enabledelayedexpansion
 ::                            docker/podman container named after --name
 ::    --commit <image:tag>    Container target: also save the result as an image
 ::    --dry-run               Parse and print config, do not execute
-::    --recipe <name|file>    Defaults from a recipe: <private overlay>\recipes\<name>.conf
+::    --recipe <name|file>    Defaults from a recipe: recipes\<name>.conf here or in a private overlay
 ::                            (or a .conf path); the other arguments still override them
 ::    --recipes               List the recipes in the private overlays
 ::    --help,     -h          Show this help
@@ -711,7 +711,7 @@ exit /b 0
 
 :: ============================================================
 ::  RECIPES (--recipe NAME | --recipes)
-::  A recipe is a key=value file in a private overlay's recipes\ folder: image, name, user,
+::  A recipe is a key=value file in recipes\ here (samples) or in a private overlay's: image, name, user,
 ::  location, bootstraps, poststraps, target, commit, extra (engine and arch are for
 ::  container2x.sh). It expands into arguments placed BEFORE the ones given here, and the
 ::  script runs again, so command line arguments win ("last one wins").
@@ -738,28 +738,24 @@ shift
 goto :recipe_scan
 
 :recipe_dirs
-:: Folders to search, ; separated in _RD: --private given here, else C2W_PRIVATE_DIRS, else
-:: sibling folders with a .devtools-overlay marker (the same rule as the build itself).
-set "_RD="
+:: Folders whose recipes\ is searched, ; separated in _RD, in order (a later match wins): this
+:: script's own folder (built-in samples such as default), then --private given here, else
+:: C2W_PRIVATE_DIRS, else sibling folders with a .devtools-overlay marker (as for the build).
+set "_RD=%C2W_SCRIPT_DIR:~0,-1%"
 if defined _RCP_PRIV (
-    set "_RD=!_RCP_PRIV:~1!"
+    set "_RD=!_RD!!_RCP_PRIV!"
     goto :eof
 )
 if defined C2W_PRIVATE_DIRS (
-    set "_RD=%C2W_PRIVATE_DIRS%"
+    set "_RD=!_RD!;%C2W_PRIVATE_DIRS%"
     goto :eof
 )
 for /d %%d in ("%C2W_SCRIPT_DIR%..\*") do if exist "%%~fd\.devtools-overlay" set "_RD=!_RD!;%%~fd"
-if defined _RD set "_RD=!_RD:~1!"
 goto :eof
 
 :recipe_list
 call :recipe_dirs
 echo Recipes ^(name, overlay, image^):
-if not defined _RD (
-    echo   none: no private overlay folders found ^(--private, C2W_PRIVATE_DIRS or a sibling .devtools-overlay marker^)
-    goto :eof
-)
 for %%o in ("!_RD:;=" "!") do for %%r in ("%%~o\recipes\*.conf") do (
     set "_IMG="
     for /f "usebackq eol=# tokens=1,* delims==" %%k in ("%%~fr") do if "%%k"=="image" set "_IMG=%%l"
@@ -788,7 +784,7 @@ if defined _RF if not exist "!_RF!" (
 if not defined _RF call :recipe_dirs
 if not defined _RF if defined _RD for %%o in ("!_RD:;=" "!") do if exist "%%~o\recipes\%_RCP%.conf" set "_RF=%%~o\recipes\%_RCP%.conf"
 if not defined _RF (
-    echo [ERROR] No recipe "%_RCP%" in the recipes folder of any private overlay.
+    echo [ERROR] No recipe "%_RCP%" in docker2wsl\recipes or the recipes folder of any private overlay.
     call :recipe_list
     exit /b 2
 )

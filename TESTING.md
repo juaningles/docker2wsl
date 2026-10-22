@@ -161,12 +161,13 @@ themselves.
 `-n` / `-u` override it; `--target container` (or `target=container` in the recipe) builds a
 container and then `commit=` applies; with `C2W_PRIVATE_DIRS=a;b` the recipe in `b` wins; a `.conf`
 path works; a missing recipe, a recipe without `image=` and a missing path fail with a message; the
-`rebuild-wsl.bat` wrapper lists with no arguments and forwards a recipe plus overrides.
+`rebuild-wsl.bat` wrapper lists with no arguments and forwards a recipe plus overrides; the built-in
+`recipes\default.conf` is listed and builds, and an overlay's `default.conf` replaces it.
 
 ### `tests/sh/` — container2x.sh (macOS / Linux)
 
 ```bash
-tests/sh/run.sh            # mock suite: 103 checks, every engine, no engine installed needed
+tests/sh/run.sh            # mock suite: 108 checks, every engine, no engine installed needed
 tests/sh/run.sh --real     # mock suite, then tests/sh/real.sh
 bash tests/sh/real.sh podman   # real builds for one engine only
 ```

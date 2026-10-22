@@ -20,7 +20,7 @@
 #                            ~/.local/share/container2x); DIR/NAME/container2wsl-manifest.jsonl
 #     -f, --force            replace an existing container of that name
 #         --dry-run          show the plan and the rendered straps, change nothing
-#         --recipe NAME      defaults from <private overlay>/recipes/NAME.conf (or a .conf path);
+#         --recipe NAME      defaults from recipes/NAME.conf here or in a private overlay (or a path);
 #                            the other arguments still override them. --recipes lists them.
 #     -h, --help
 # Bare strap names resolve from bootstraps/ or poststraps/ next to this script, then from each
@@ -55,8 +55,9 @@ while [ $_i -lt ${#_a[@]} ]; do
   esac
   _i=$((_i+1))
 done
-recipe_dirs() {   # one folder per line: --private given, else C2W_PRIVATE_DIRS, else marked siblings
-  local d
+recipe_dirs() {   # one folder per line, a later match wins: this repo (built-in samples such as
+  local d         # default), then --private given, else C2W_PRIVATE_DIRS, else marked siblings
+  printf '%s\n' "$SCRIPT_DIR"
   if [ ${#_rpriv[@]} -gt 0 ]; then printf '%s\n' "${_rpriv[@]}"
   elif [ -n "${C2W_PRIVATE_DIRS:-}" ]; then printf '%s\n' "$C2W_PRIVATE_DIRS" | tr ':' '\n'
   else for d in "$SCRIPT_DIR"/../*/; do [ -f "$d.devtools-overlay" ] && (cd "$d" && pwd -P); done; fi
@@ -85,7 +86,7 @@ $(recipe_dirs)
 EOF
        ;;
   esac
-  [ -n "$_rf" ] || { echo "[ERROR] No recipe \"$_rc\" in the recipes folder of any private overlay." >&2; recipe_list >&2; exit 2; }
+  [ -n "$_rf" ] || { echo "[ERROR] No recipe \"$_rc\" in docker2wsl/recipes or the recipes folder of any private overlay." >&2; recipe_list >&2; exit 2; }
   _get() { sed -n "s/^$1=//p" "$_rf" | tr -d '\r' | tail -1; }
   _v=$(_get image); [ -n "$_v" ] || { echo "[ERROR] Recipe $_rf has no image= line." >&2; exit 2; }
   _ra=("$_v"); _v=$(_get name); _ra+=(-n "${_v:-$(basename "$_rf" .conf)}")
