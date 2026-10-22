@@ -384,7 +384,11 @@ if [ -f "$SCRIPT_DIR/lib/c2w-manifest" ]; then
   e_exec root install -D -m 755 "$RUN_DIR/c2w-manifest" /usr/local/bin/c2w-manifest >/dev/null 2>&1 || true
 fi
 
-SEQ=0 FAILED=
+SEQ=0 FAILED= DISK_LAST=
+# KB used on the container's root filesystem (df -Pk /); a strap's size is the growth over it. An
+# Apple container has its own disk; a docker/podman container's / is the engine's disk.
+disk_used() { e_exec root df -Pk / 2>/dev/null | awk 'NR == 2 && $3 ~ /^[0-9]+$/ { print $3 }'; }
+human_kb() { local k=$1 s=+; [ "$k" -lt 0 ] && { s=-; k=$((-k)); }; if [ "$k" -ge 1024 ]; then printf '%s%d MB' "$s" $(((k + 512) / 1024)); else printf '%s%d KB' "$s" "$k"; fi; }
 run_straps() {   # $1 = boot|post
   local kind as list step i=0 f n out rc t0 copy cnt
   if [ "$1" = boot ]; then kind=bootstrap; as=root; list=(${BOOT[@]+"${BOOT[@]}"}); local reqs=(${BOOT_REQ[@]+"${BOOT_REQ[@]}"})
@@ -396,17 +400,21 @@ run_straps() {   # $1 = boot|post
     strap_dir_vars "$f"; out="$RUN_DIR/$n-$kind-$(basename "$f").sh"; render "$f" "$out"
     cnt=$(($(wc -l < "$out") - 2))   # minus the set -e / DEBIAN_FRONTEND header
     t0=$(epoch); rc=0
+    [ -n "$DISK_LAST" ] || DISK_LAST=$(disk_used)
     e_exec "$as" bash "$out" || rc=$?
+    local used size=; used=$(disk_used)
+    if [ -n "$used" ] && [ -n "$DISK_LAST" ]; then size=$((used - DISK_LAST)); fi
+    [ -n "$used" ] && DISK_LAST=$used
     copy="/etc/container2wsl/straps/$n-$kind-$(basename "$f").sh"
     e_exec root install -D -m 600 "$out" "$copy" >/dev/null 2>&1 || true
     m_write "{\"event\":\"strap\",\"time\":\"$(now)\",\"kind\":\"$kind\",\"index\":$i,\"seq\":$SEQ,\"requested\":$(js "${reqs[$((i-1))]}"),\
 \"path\":$(js "$f"),\"sha256\":$(js "$(sha "$f")"),\"git\":$(gitj "$f"),\"rendered_sha256\":$(js "$(sha "$out")"),\
-\"rendered_copy\":$(js "$copy"),\"run_as\":$(js "$as"),\"commands\":$cnt,\"duration_s\":$(( $(epoch) - t0 )),\"result\":\"$([ $rc = 0 ] && echo ok || echo failed)\"}"
+\"rendered_copy\":$(js "$copy"),\"run_as\":$(js "$as"),\"commands\":$cnt,\"duration_s\":$(( $(epoch) - t0 )),\"size_kb\":${size:-null},\"used_kb\":${used:-null},\"result\":\"$([ $rc = 0 ] && echo ok || echo failed)\"}"
     if [ "$rc" != 0 ]; then FAILED="$kind $i: ${reqs[$((i-1))]}"; return 1; fi
-    say "      Complete ($cnt commands executed)."
+    say "      Complete ($cnt commands executed${size:+, $(human_kb "$size")})."
   done
 }
-complete_rec() { m_write "{\"event\":\"complete\",\"time\":\"$(now)\",\"result\":\"$1\",\"failed\":$(jsn "$FAILED"),\"duration_s\":$(( $(epoch) - BUILD_T0 ))}"; }
+complete_rec() { m_write "{\"event\":\"complete\",\"time\":\"$(now)\",\"result\":\"$1\",\"failed\":$(jsn "$FAILED"),\"duration_s\":$(( $(epoch) - BUILD_T0 )),\"used_kb\":${DISK_LAST:-null}}"; }
 STEP=4
 if [ ${#BOOT[@]} -gt 0 ]; then run_straps boot $STEP || { complete_rec failed; die "Bootstrap failed: $FAILED"; }; STEP=$((STEP+1)); fi
 if [ ${#POST[@]} -gt 0 ]; then run_straps post $STEP || { complete_rec failed; die "Poststrap failed: $FAILED"; }; STEP=$((STEP+1)); fi

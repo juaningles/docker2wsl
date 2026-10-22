@@ -79,7 +79,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (402 assertions)
+tests\run_tests.bat                        # run all (414 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -171,6 +171,8 @@ tests/
 | `C2W_MOCK_WSL_DISTRO_EXISTS` | (unset) | name to report as existing in wsl --list --quiet |
 | `C2W_MOCK_CONTAINER_ID` | mock-container-abc123 | ID returned by docker create |
 | `C2W_MOCK_CT_EXISTS` | 0 | 1 = docker container inspect finds the container (container target) |
+| `C2W_MOCK_DF_FILE` | (unset) | `df -Pk /` (via wsl or docker exec) reports a used KB count kept in this file, growing by `C2W_MOCK_DF_STEP` (2048) per call |
+| `C2W_MOCK_SCRIPTS` | (unset) | the wsl mock copies each rendered strap script here as `last-<name>` |
 | `C2W_MOCK_RUN_FAIL` | 0 | 1 = docker run fails |
 | `C2W_MOCK_EXEC_FAIL` | 0 | 1 = docker exec fails |
 | `C2W_MOCK_COMMIT_FAIL` | 0 | 1 = docker commit fails |
@@ -186,3 +188,4 @@ tests/
 | `C2X_MOCK_RUN_FAIL`, `C2X_MOCK_STRAP_FAIL`, `C2X_MOCK_COMMIT_FAIL`, `C2X_MOCK_BUILD_FAIL` | 0 | 1 = that step fails (`BUILD` is the build in Apple's commit step) |
 | `C2X_MOCK_SCRIPTS` | (unset) | folder that receives a copy of every rendered script run through exec |
 | `C2X_MOCK_SHELL` | /usr/bin/zsh | login shell reported by `getent passwd` |
+| `C2X_MOCK_DF_FILE` | (unset) | `df -Pk /` reports a used KB count kept in this file, growing by `C2X_MOCK_DF_STEP` (2048) per call |

@@ -105,6 +105,7 @@ exit /b 0
 
 :do_exec
 :: docker exec -u USER NAME cmd...
+if defined C2W_MOCK_DF_FILE if "%~5"=="df" goto :mock_df
 if %C2W_MOCK_EXEC_FAIL% equ 1 (
     echo [MOCK docker] exec failed
     exit /b 1
@@ -122,4 +123,16 @@ exit /b 0
 
 :do_version
 echo MOCK docker version 0.0
+exit /b 0
+
+:mock_df
+:: Fake "df -Pk /": the used KB kept in C2W_MOCK_DF_FILE grows by C2W_MOCK_DF_STEP (default 2048)
+:: on every call, so each strap appears to add that much.
+set "_DFU=0"
+if exist "%C2W_MOCK_DF_FILE%" set /p _DFU=<"%C2W_MOCK_DF_FILE%"
+if not defined C2W_MOCK_DF_STEP set "C2W_MOCK_DF_STEP=2048"
+set /a _DFU+=C2W_MOCK_DF_STEP
+>"%C2W_MOCK_DF_FILE%" echo !_DFU!
+echo Filesystem     1024-blocks      Used Available Capacity Mounted on
+echo /dev/sdc         1000000000 !_DFU! 900000000       1%% /
 exit /b 0

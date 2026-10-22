@@ -29,8 +29,9 @@ try {
   foreach ($s in ($recs | Where-Object { $_.event -eq 'strap' })) {
     $i++
     $lines += "strap$i=$($s.kind) $($s.requested) $($s.result) as=$($s.run_as) copy=$($s.rendered_copy) sha=$([bool]$s.sha256) rsha=$([bool]$s.rendered_sha256)"
+    $lines += "strap$i.size=$($s.size_kb) used=$($s.used_kb)"
   }
   $d = $recs | Where-Object { $_.event -eq 'complete' } | Select-Object -Last 1
-  if ($d) { $lines += "complete=$($d.result) failed=$($d.failed)" }
+  if ($d) { $lines += "complete=$($d.result) failed=$($d.failed)"; $lines += "complete.used=$($d.used_kb)" }
 } catch { $lines += 'parse=failed' }
 Set-Content -LiteralPath $Out -Value $lines -Encoding ascii

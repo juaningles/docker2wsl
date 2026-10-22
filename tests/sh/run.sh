@@ -84,6 +84,27 @@ for eng in docker podman; do
   has "$OUT" "Enter  : $eng exec -it -u tester -w /home/tester b-$eng /usr/bin/zsh -l" "$eng: enter command uses the user's login shell"
 done
 
+t "strap sizes (df before the first strap and after each)"
+reset; export C2X_MOCK_DF_FILE="$TMP/df_used"; rm -f "$C2X_MOCK_DF_FILE"
+c2x ubuntu:24.04 --engine podman -n sz1 -u tester -b "$BS" -p "$PS"
+rc0 $? "size: exit 0"
+has "$OUT" "commands executed, +2 MB)" "size: completion line shows the strap's size"
+M="$TMP/records/sz1/container2wsl-manifest.jsonl"
+has "$M" '"size_kb":2048,"used_kb":4096' "size: bootstrap record has size and usage"
+has "$M" '"size_kb":2048,"used_kb":6144' "size: poststrap record has size and usage"
+has "$M" '"used_kb":6144}' "size: complete record has the final usage"
+sh "$ROOT/lib/c2w-manifest" -f "$M" > "$TMP/report.txt" 2>&1
+has "$TMP/report.txt" "size" "report: size column"
+has "$TMP/report.txt" "+2 MB" "report: per-strap size"
+has "$TMP/report.txt" "+4 MB  (disk used at the end: 6 MB)" "report: total and final usage"
+sh "$ROOT/lib/c2w-manifest" -s -f "$M" > "$TMP/report.txt" 2>&1
+has "$TMP/report.txt" "2 ok, +4 MB)" "report --short: total size"
+unset C2X_MOCK_DF_FILE
+c2x ubuntu:24.04 --engine podman -n sz2 -b "$BS"
+has "$TMP/records/sz2/container2wsl-manifest.jsonl" '"size_kb":null,"used_kb":null' "size: no df answer means null, not a wrong number"
+sh "$ROOT/lib/c2w-manifest" -f "$TMP/records/sz2/container2wsl-manifest.jsonl" > "$TMP/report.txt" 2>&1
+hasnt "$TMP/report.txt" "disk used at the end" "report: no total line without sizes"
+
 t "podman --commit resets the sleep entrypoint"
 reset
 c2x ubuntu:24.04 --engine podman -n c1 -u tester --commit localhost/c1:1

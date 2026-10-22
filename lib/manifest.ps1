@@ -13,7 +13,7 @@
                    VERSION C2W_ARGV C2W_CWD C2W_SCRIPT_DIR DOCKER_CMD WSL_CMD FORCE
                    C2W_TARGET (wsl|container) C2W_ENGINE ARG_COMMIT C2W_RECIPE
     create         C2W_IMAGE_PULLED C2W_BUILD_START ARG_{BOOT,POST}STRAP_N/_i/_REQ_i
-    strap          C2W_M_KIND C2W_M_INDEX C2W_M_SEQ C2W_M_REQ C2W_M_PATH C2W_M_SH
+    strap          C2W_M_KIND C2W_M_INDEX C2W_M_SEQ C2W_M_REQ C2W_M_PATH C2W_M_SH C2W_M_SIZE_KB C2W_M_USED_KB
                    C2W_M_COPY C2W_M_COUNT C2W_M_RESULT C2W_M_AS C2W_STRAP_START
     complete       C2W_M_RESULT C2W_M_FAILED C2W_BUILD_START
   Exit code is always 0 unless the record could not be written at all.
@@ -29,6 +29,7 @@ function Quiet([scriptblock]$b) { try { $r = & $b; if ($null -eq $r) { return $n
 function ReadStamp([string]$file) {
   Quiet { if ($file -and (Test-Path $file)) { [DateTime]::Parse((Get-Content $file -Raw).Trim()).ToUniversalTime() } }
 }
+function Kb([string]$n) { $v = Ev $n; if ($v -match '^-?\d+$') { [long]$v } else { $null } }
 function Seconds($start) { if ($start) { [math]::Round(([DateTime]::UtcNow - $start).TotalSeconds, 1) } else { $null } }
 # Run a .bat/.exe through cmd so mocks (docker.bat, wsl.bat) behave like the real tools.
 function RunCmd([string]$cmdline) { Quiet { $o = & cmd /c "$cmdline 2>nul"; if ($LASTEXITCODE -eq 0) { $o } } }
@@ -123,6 +124,8 @@ switch ($action) {
       run_as     = (Ev 'C2W_M_AS')
       commands   = [int](Ev 'C2W_M_COUNT')
       duration_s = (Seconds (ReadStamp (Ev 'C2W_STRAP_START')))
+      size_kb    = (Kb 'C2W_M_SIZE_KB')
+      used_kb    = (Kb 'C2W_M_USED_KB')
       result     = (Ev 'C2W_M_RESULT')
     }
   }
@@ -133,6 +136,7 @@ switch ($action) {
       result     = (Ev 'C2W_M_RESULT')
       failed     = (Ev 'C2W_M_FAILED')
       duration_s = (Seconds (ReadStamp (Ev 'C2W_BUILD_START')))
+      used_kb    = (Kb 'C2W_DISK_LAST')
     }
   }
   default { exit 1 }

@@ -167,7 +167,7 @@ path works; a missing recipe, a recipe without `image=` and a missing path fail 
 ### `tests/sh/` — container2x.sh (macOS / Linux)
 
 ```bash
-tests/sh/run.sh            # mock suite: 108 checks, every engine, no engine installed needed
+tests/sh/run.sh            # mock suite: 127 checks, every engine, no engine installed needed
 tests/sh/run.sh --real     # mock suite, then tests/sh/real.sh
 bash tests/sh/real.sh podman   # real builds for one engine only
 ```
@@ -235,6 +235,7 @@ Simulates `docker image inspect`, `docker pull`, `docker create`, `docker export
 | `C2W_MOCK_CONTAINER_ID` | `mock-container-abc123` | ID echoed by `docker create` |
 | `C2W_MOCK_LOG` | (unset) | Path to log file recording all mock calls |
 | `C2W_MOCK_CT_EXISTS` | `0` | `1` = `docker container inspect` finds the container |
+| `C2W_MOCK_DF_FILE` | (unset) | `docker exec ... df -Pk /` reports a growing used KB count (also in `wsl.bat`; step `C2W_MOCK_DF_STEP`, 2048) |
 | `C2W_MOCK_RUN_FAIL` | `0` | `1` = `docker run` returns error |
 | `C2W_MOCK_EXEC_FAIL` | `0` | `1` = `docker exec` returns error |
 | `C2W_MOCK_COMMIT_FAIL` | `0` | `1` = `docker commit` returns error |

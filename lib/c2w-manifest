@@ -95,6 +95,13 @@ function human(b) {
   if (b >= 1048576) return sprintf("%.0f MB", b / 1048576)
   return b " B"
 }
+function kb(x,   s) {   # KB count as "+12 MB" / "-3 KB" / "1.4 GB"; "-" when unknown
+  if (x == "") return "-"
+  x = x + 0; s = (x < 0) ? "-" : "+"; if (x < 0) x = -x
+  if (x >= 1048576) return sprintf("%s%.1f GB", s, x / 1048576)
+  if (x >= 1024) return sprintf("%s%d MB", s, int(x / 1024 + 0.5))
+  return sprintf("%s%d KB", s, x)
+}
 function yn(x) { return x == "true" ? "yes" : (x == "false" ? "no" : x) }
 function dflt(a, b) { return a != "" ? a : b }
 
@@ -125,9 +132,10 @@ function dflt(a, b) { return a != "" ? a : b }
     sk[ns] = v("kind"); sn[ns] = base(v("requested")); sr[ns] = v("result"); sd[ns] = v("duration_s")
     sa[ns] = v("run_as"); ssha[ns] = substr(v("sha256"), 1, 12); sgit[ns] = v("git.commit")
     sdirty[ns] = v("git.dirty"); sc[ns] = v("commands"); scopy[ns] = v("rendered_copy")
+    ssize[ns] = v("size_kb"); if (ssize[ns] != "") { tsize += ssize[ns]; hsize = 1 }
     if (sr[ns] == "ok") nok++; else nfail++
   } else if (ev == "complete") {
-    done = 1; result = v("result"); failed = v("failed"); total = v("duration_s"); ftime = v("time")
+    done = 1; result = v("result"); failed = v("failed"); total = v("duration_s"); ftime = v("time"); endused = v("used_kb")
   }
 }
 
@@ -142,7 +150,7 @@ END {
     line = ""
     for (i = 0; i < nb; i++) line = line " " reqb[i]
     if (np > 0) { line = line " |"; for (i = 0; i < np; i++) line = line " " reqp[i] }
-    if (nb + np > 0) printf "  straps:%s (%d ok%s)\n", line, nok, (nfail ? ", " nfail " failed" : "")
+    if (nb + np > 0) printf "  straps:%s (%d ok%s%s)\n", line, nok, (nfail ? ", " nfail " failed" : ""), (hsize ? ", " kb(tsize) : "")
     exit 0
   }
 
@@ -162,9 +170,10 @@ END {
   printf "Host      %s (%s)  %s%s%s\n", hcomp, huser, (hwin != "" ? "Windows " hwin : hos), (hwsl != "" ? "  " hwsl : ""), (heng != "" ? "  " heng : "")
   if (ns == 0 && nb + np == 0) { print "Straps    none"; exit 0 }
   printf "Straps    %d requested, %d ran: %d ok, %d failed\n", nb + np, ns, nok, nfail
-  printf "  %-2s %-9s %-18s %-6s %7s %-8s %-12s %s\n", "#", "kind", "name", "result", "time", "as", "sha256", "git"
+  printf "  %-2s %-9s %-18s %-6s %7s %9s %-8s %-12s %s\n", "#", "kind", "name", "result", "time", "size", "as", "sha256", "git"
   for (i = 1; i <= ns; i++)
-    printf "  %-2d %-9s %-18s %-6s %7s %-8s %-12s %s\n", i, sk[i], sn[i], sr[i], dur(sd[i]), sa[i], ssha[i], dflt(sgit[i], "-") (sdirty[i] == "true" ? "*" : "")
+    printf "  %-2d %-9s %-18s %-6s %7s %9s %-8s %-12s %s\n", i, sk[i], sn[i], sr[i], dur(sd[i]), kb(ssize[i]), sa[i], ssha[i], dflt(sgit[i], "-") (sdirty[i] == "true" ? "*" : "")
+  if (hsize) printf "  %-48s %9s  (disk used at the end: %s)\n", "total", kb(tsize), (endused != "" ? substr(kb(endused), 2) : "?")
   if (nb + np > ns) {
     line = ""
     for (i = ns; i < nb; i++) line = line " " reqb[i]

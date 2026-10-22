@@ -55,7 +55,9 @@ folders must exist there too. From WSL with the `podman-machine` poststrap, keep
 Both give a non-login shell with `HOME` set. `USER` is unset under `exec`, so straps use `$HOME`
 and `$(id -un)`, not `$USER`.
 
-**Manifest.** The same JSON Lines records (`create`, one `strap` per strap, `complete`) go to
+**Manifest.** Each runner reads `df -Pk /` in the target before the first strap and after each one;
+the growth is the strap's `size_kb` (and `used_kb` the reading), the last reading goes in `complete`.
+The same JSON Lines records (`create`, one `strap` per strap, `complete`) go to
 `/etc/container2wsl/manifest.jsonl` in the target, with the exact rendered scripts in
 `/etc/container2wsl/straps/`, and a copy on the host under `C2W_LOCATION/NAME/`. `c2w-manifest`
 reads both kinds. Container records add `distro.target`, `distro.engine` and `distro.commit`.

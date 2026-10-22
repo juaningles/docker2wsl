@@ -1198,8 +1198,10 @@ powershell -noprofile -command ^
 call :win2lx "%_BS_SH%" _BS_SH_LX
 :: stdin from nul: WSL would hand the strap this console, and a prompt (apt's tzdata asks for a
 :: timezone) would wait unseen because the output goes to a file until the strap ends
+if not defined C2W_DISK_LAST call :disk_used C2W_DISK_LAST
 call %T_ROOT% bash !_BS_SH_LX! < nul > "%_BS_TMP%" 2>&1
 set "_BS_RC=!errorlevel!"
+call :disk_size
 set "_BS_FAIL=0"
 if !_BS_RC! neq 0 set "_BS_FAIL=1"
 findstr /c:"E r r o r" "%_BS_TMP%" >nul 2>&1
@@ -1213,7 +1215,7 @@ if "!_BS_FAIL!"=="1" (
     echo [ERROR] Bootstrap command failed.
     exit /b 1
 )
-echo       Bootstrap complete ^(!_BS_COUNT! commands executed^).
+echo       Bootstrap complete ^(!_BS_COUNT! commands executed!_SIZE_MSG!^).
 exit /b 0
 
 
@@ -1260,8 +1262,10 @@ powershell -noprofile -command ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_PS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
 call :win2lx "%_PS_SH%" _PS_SH_LX
+if not defined C2W_DISK_LAST call :disk_used C2W_DISK_LAST
 call %T_USER% bash !_PS_SH_LX! < nul > "%_PS_TMP%" 2>&1
 set "_PS_RC=!errorlevel!"
+call :disk_size
 set "_PS_FAIL=0"
 if !_PS_RC! neq 0 set "_PS_FAIL=1"
 findstr /c:"E r r o r" "%_PS_TMP%" >nul 2>&1
@@ -1275,7 +1279,7 @@ if "!_PS_FAIL!"=="1" (
     echo [ERROR] Poststrap command failed.
     exit /b 1
 )
-echo       Poststrap complete ^(!_PS_COUNT! commands executed^).
+echo       Poststrap complete ^(!_PS_COUNT! commands executed!_SIZE_MSG!^).
 exit /b 0
 
 
@@ -1323,6 +1327,31 @@ set "C2W_STRAP_DIR=%~dp1"
 call :win2lx "%~dp1" C2W_STRAP_DIR_LX
 goto :eof
 
+
+:disk_used
+:: %~1 = variable to receive the KB used on the target's root filesystem (df -Pk /); empty if
+:: unknown. A WSL distro has its own disk; a docker/podman container's / is the engine's disk.
+set "%~1="
+for /f "skip=1 tokens=3" %%u in ('%T_ROOT% df -Pk / 2^>nul') do set "%~1=%%u"
+if defined %~1 echo !%~1!| findstr /r /x "[0-9][0-9]*" >nul || set "%~1="
+goto :eof
+
+:disk_size
+:: After a strap: C2W_M_USED_KB = KB used now, C2W_M_SIZE_KB = growth since the previous reading
+:: (the strap's size), _SIZE_MSG = ", +12 MB" for the completion line.
+set "C2W_M_SIZE_KB="
+set "_SIZE_MSG="
+call :disk_used C2W_M_USED_KB
+if not defined C2W_M_USED_KB goto :eof
+if defined C2W_DISK_LAST set /a C2W_M_SIZE_KB=C2W_M_USED_KB-C2W_DISK_LAST
+set "C2W_DISK_LAST=%C2W_M_USED_KB%"
+if not defined C2W_M_SIZE_KB goto :eof
+set "_SZ_SIGN=+"
+if %C2W_M_SIZE_KB% lss 0 set "_SZ_SIGN="
+set /a _SZ_MB=C2W_M_SIZE_KB/1024
+if %C2W_M_SIZE_KB% geq 0 set /a _SZ_MB=(C2W_M_SIZE_KB+512)/1024
+if %_SZ_MB% neq 0 (set "_SIZE_MSG=, %_SZ_SIGN%%_SZ_MB% MB") else set "_SIZE_MSG=, %_SZ_SIGN%%C2W_M_SIZE_KB% KB"
+goto :eof
 
 :manifest_strap
 :: Record one strap run and keep the exact script that ran inside the distro.

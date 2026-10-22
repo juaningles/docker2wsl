@@ -10,6 +10,8 @@
 #   C2X_MOCK_BUILD_FAIL=1     build fails (the Apple commit step builds FROM scratch)
 #   C2X_MOCK_SCRIPTS=DIR      copy every script run through exec into DIR
 #   C2X_MOCK_SHELL=/bin/x     login shell reported by "getent passwd" (default /usr/bin/zsh)
+#   C2X_MOCK_DF_FILE=FILE     "df -Pk /" reports a used KB count kept in FILE that grows by
+#                             C2X_MOCK_DF_STEP (default 2048) per call
 me=$(basename "$0")
 [ -n "${C2X_MOCK_LOG:-}" ] && printf '%s %s\n' "$me" "$*" >> "$C2X_MOCK_LOG"
 case "$1" in
@@ -37,6 +39,9 @@ case "$1" in
         [ "${C2X_MOCK_STRAP_FAIL:-0}" = 1 ] && { echo "mock strap failed"; exit 1; }
         echo "mock ran $(basename "$2")"; exit 0 ;;
       getent) echo "$3:x:1000:1000::/home/$3:${C2X_MOCK_SHELL:-/usr/bin/zsh}"; exit 0 ;;
+      df) [ -n "${C2X_MOCK_DF_FILE:-}" ] || exit 1
+          u=$(( $(cat "$C2X_MOCK_DF_FILE" 2>/dev/null || echo 0) + ${C2X_MOCK_DF_STEP:-2048} )); echo "$u" > "$C2X_MOCK_DF_FILE"
+          printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda 1000000000 %s 900000000 1%% /\n' "$u"; exit 0 ;;
       *) exit 0 ;;   # useradd, usermod, id, install, sh -c
     esac ;;
   *) echo "mock-$me: unhandled: $*" >&2; exit 0 ;;

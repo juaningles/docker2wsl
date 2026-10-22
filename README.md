@@ -234,17 +234,17 @@ It is [JSON Lines](https://jsonlines.org/): one record per line, appended as the
 | `event` | Recorded | Contents |
 |---|---|---|
 | `create` | once the distro exists | the command line as typed and its working folder; the image as requested, its image ID (`sha256:...`), registry digests (`repo@sha256:...`), tags, OS/arch, build date, size and whether this run pulled it; distro name, user, install path and `/etc/os-release` name; requested straps (as typed and resolved); container2wsl version and git commit; Windows host, build, WSL version and container engine |
-| `strap` | after each bootstrap/poststrap, pass or fail | kind, order, name as requested, resolved path, sha256 and git commit (with a dirty flag) of the strap file, sha256 of the rendered script and where it was saved, user it ran as, command count, duration, `ok`/`failed` |
-| `complete` | at the end | `ok` or `failed`, the failed step (for example `poststrap 2: uv`), total duration |
+| `strap` | after each bootstrap/poststrap, pass or fail | kind, order, name as requested, resolved path, sha256 and git commit (with a dirty flag) of the strap file, sha256 of the rendered script and where it was saved, user it ran as, command count, duration, `ok`/`failed`, and its size: `size_kb`, how much the root filesystem grew while it ran (`df` before the first strap and after each one), and `used_kb` after it |
+| `complete` | at the end | `ok` or `failed`, the failed step (for example `poststrap 2: uv`), total duration, `used_kb` at the end |
 
 Inside the distro, `c2w-manifest` prints a readable report. It is installed to `/usr/local/bin` with the manifest and needs only `sh` and `awk`:
 
 ```text
 $ c2w-manifest --short
 container2wsl: zdevnode from juaningles/devnode:noble @sha256:68ee22004a91, built 2026-10-20 14:58 UTC, ok in 25m31s
-  straps: sudo systemd-enable zsh homebrew k8s-tools | powerlevel10k uv devtools-shell (8 ok)
+  straps: sudo systemd-enable zsh homebrew k8s-tools | powerlevel10k uv devtools-shell (8 ok, +1.2 GB)
 
-$ c2w-manifest            # long: image id and digests, command line, host, one row per strap
+$ c2w-manifest            # long: image id and digests, command line, host, one row per strap with its size
 $ c2w-manifest -f /mnt/c/wsl-storage/other/container2wsl-manifest.jsonl   # any manifest file
 ```
 
@@ -257,6 +257,10 @@ cat /etc/container2wsl/manifest.jsonl | jq .                       # everything
 jq -r 'select(.event=="create") | .image.digests[]' /etc/container2wsl/manifest.jsonl
 jq -r 'select(.event=="strap") | "\(.kind) \(.requested) \(.result) \(.duration_s)s"' /etc/container2wsl/manifest.jsonl
 ```
+
+Sizes are exact for a WSL distro and an Apple container, which each have their own disk. A docker or
+podman container's `/` is the engine's shared disk, so its sizes can include other activity there.
+When `df` gives no answer, the size is left empty rather than guessed.
 
 A `--force` rebuild keeps the previous Windows copy as `container2wsl-manifest.prev.jsonl`. `--dry-run` writes nothing. Straps you run by hand later (`sudo bash bootstraps/k8s-tools`) are not recorded.
 

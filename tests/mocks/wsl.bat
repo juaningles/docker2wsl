@@ -51,6 +51,7 @@ exit /b 0
 :: wsl -d <name> [-u <user>] -- bash -c <cmd>
 :: With C2W_MOCK_SCRIPTS set, "-d N -u U -- bash /mnt/<d>/path" copies that script there.
 if defined C2W_MOCK_SCRIPTS if "%~6"=="bash" call :keep_script "%~7"
+if defined C2W_MOCK_DF_FILE if "%~6"=="df" goto :mock_df
 if %C2W_MOCK_WSL_BASH_FAIL% equ 1 (
     echo [MOCK wsl] bash command failed
     exit /b 1
@@ -80,4 +81,16 @@ set "_KS=!_KS:/mnt/=!"
 set "_KS=!_KS:~0,1!:!_KS:~1!"
 set "_KS=!_KS:/=\!"
 copy /y "!_KS!" "%C2W_MOCK_SCRIPTS%\last-%~nx1" >nul 2>&1
+exit /b 0
+
+:mock_df
+:: Fake "df -Pk /": the used KB kept in C2W_MOCK_DF_FILE grows by C2W_MOCK_DF_STEP (default 2048)
+:: on every call, so each strap appears to add that much.
+set "_DFU=0"
+if exist "%C2W_MOCK_DF_FILE%" set /p _DFU=<"%C2W_MOCK_DF_FILE%"
+if not defined C2W_MOCK_DF_STEP set "C2W_MOCK_DF_STEP=2048"
+set /a _DFU+=C2W_MOCK_DF_STEP
+>"%C2W_MOCK_DF_FILE%" echo !_DFU!
+echo Filesystem     1024-blocks      Used Available Capacity Mounted on
+echo /dev/sdc         1000000000 !_DFU! 900000000       1%% /
 exit /b 0

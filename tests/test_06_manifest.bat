@@ -134,6 +134,28 @@ call "%HELPERS%" assert_output_contains "%OUT%" "Manifest : off" "mf-nolib: bann
 call "%HELPERS%" assert_output_not_contains "%OUT%" "WARN" "mf-nolib: no warnings"
 call "%HELPERS%" assert_file_not_exists "%STORE%\%_N%\container2wsl-manifest.jsonl" "mf-nolib: no manifest written"
 
+:: ============================================================
+::  Strap sizes: df before the first strap and after each one
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m manifest records each strap's size
+call :reset_mocks 2>nul
+set "C2W_MOCK_DF_FILE=%C2W_TMPDIR%\mock_df_used.txt"
+if exist "%C2W_MOCK_DF_FILE%" del /f /q "%C2W_MOCK_DF_FILE%"
+set "_N=%C2W_TEST_ID%-mfsz"
+call "%SCRIPT%" ubuntu:24.04 -n %_N% -u alice -l "%STORE%" -b sudo -p uv > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+set "C2W_MOCK_DF_FILE="
+set "_MF=%STORE%\%_N%\container2wsl-manifest.jsonl"
+%SUMMARIZE% "%_MF%" "%SUM%" >nul 2>&1
+call "%HELPERS%" assert_exit_zero "%_RC%" "mf-size: exit 0"
+call "%HELPERS%" assert_output_contains "%SUM%" "strap1.size=2048 used=4096" "mf-size: bootstrap size = growth since the baseline"
+call "%HELPERS%" assert_output_contains "%SUM%" "strap2.size=2048 used=6144" "mf-size: poststrap size = growth since the bootstrap"
+call "%HELPERS%" assert_output_contains "%SUM%" "complete.used=6144" "mf-size: complete record has the final usage"
+call "%HELPERS%" assert_output_contains "%OUT%" "commands executed, +2 MB)" "mf-size: completion line shows the size"
+call "%SCRIPT%" ubuntu:24.04 -n %_N%-nodf -u alice -l "%STORE%" -b sudo > "%OUT%" 2>&1
+%SUMMARIZE% "%STORE%\%_N%-nodf\container2wsl-manifest.jsonl" "%SUM%" >nul 2>&1
+call "%HELPERS%" assert_output_contains "%SUM%" "strap1.size= used=" "mf-size: no df answer means no size, not a wrong one"
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 
