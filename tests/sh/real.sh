@@ -106,6 +106,14 @@ suite_body() {
   [ $? = 0 ] && ok "$eng: --force rebuilds" || bad "$eng: --force rebuilds" "$(tail -10 "$out")"
 }
 
+for _t in container podman docker; do
+  _p=$(command -v "$_t" 2>/dev/null) || continue
+  if grep -q 'tests/sh/mock-engine' "$_p" 2>/dev/null; then
+    echo "[ERROR] real.sh: $_p is the test mock (tests/sh/mock-engine), not a real engine. Run real.sh with the normal PATH." >&2
+    exit 1
+  fi
+done
+
 echo " container2x.sh real builds ($IMAGE)"
 for eng in "${ENGINES[@]}"; do
   reason=$(available "$eng") && suite "$eng" || { [ -n "$reason" ] && skip "$eng: $reason"; }

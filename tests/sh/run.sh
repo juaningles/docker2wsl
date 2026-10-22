@@ -17,7 +17,11 @@ hasnt(){ if grep -qF -- "$2" "$1"; then bad "$3" "found but should not be: $2"; 
 rc0()  { if [ "$1" = 0 ]; then ok "$2"; else bad "$2" "exit $1"; fi; }
 rcn()  { if [ "$1" != 0 ]; then ok "$2"; else bad "$2" "exit 0"; fi; }
 
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# the environment real.sh must get back: no mock engines on PATH, none of the mock variables
+ORIG_PATH="$PATH"
+# resolved (pwd -P): on macOS mktemp gives /var/..., a symlink to /private/var/..., and the runner
+# prints resolved paths
+TMP=$(cd "$(mktemp -d)" && pwd -P); trap 'rm -rf "$TMP"' EXIT
 BIN="$TMP/bin"; mkdir -p "$BIN"
 for n in docker podman container; do cp "$HERE/mock-engine" "$BIN/$n"; chmod +x "$BIN/$n"; done
 export PATH="$BIN:$PATH" C2X_MOCK_LOG="$TMP/calls.log" C2W_LOCATION="$TMP/records" C2X_RUN_ROOT="$TMP/run"
@@ -186,5 +190,11 @@ rc0 $? "rebuild-container: exit 0"; has "$OUT" "Container: w1 (podman" "rebuild-
 echo
 printf ' Assertions: %d passed, %d failed\n' "$PASS" "$FAIL"
 RC=0; [ "$FAIL" = 0 ] || RC=1
-if [ "${1:-}" = --real ]; then echo; bash "$HERE/real.sh" || RC=1; fi
+if [ "${1:-}" = --real ]; then
+  echo
+  ( export PATH="$ORIG_PATH"
+    unset C2X_MOCK_LOG C2X_MOCK_SCRIPTS C2X_MOCK_EXISTS C2X_MOCK_NAME C2X_MOCK_RUN_FAIL C2X_MOCK_STRAP_FAIL \
+          C2X_MOCK_COMMIT_FAIL C2X_MOCK_BUILD_FAIL C2W_LOCATION C2X_RUN_ROOT C2W_PRIVATE_DIRS
+    bash "$HERE/real.sh" ) || RC=1
+fi
 exit $RC
