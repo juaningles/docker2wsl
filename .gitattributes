@@ -7,3 +7,4 @@ poststraps/* text eol=lf
 # The POSIX runner and its tests run on macOS / Linux as-is.
 container2x.sh text eol=lf
 tests/sh/* text eol=lf
+rebuild-container text eol=lf

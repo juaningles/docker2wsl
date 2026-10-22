@@ -11,7 +11,7 @@
     C2W_M_ACTION   create | strap | complete
     common         INSTALL_PATH ARG_IMAGE ARG_WSL_NAME ARG_WSL_USER ARG_WSL_LOCATION
                    VERSION C2W_ARGV C2W_CWD C2W_SCRIPT_DIR DOCKER_CMD WSL_CMD FORCE
-                   C2W_TARGET (wsl|container) C2W_ENGINE ARG_COMMIT
+                   C2W_TARGET (wsl|container) C2W_ENGINE ARG_COMMIT C2W_RECIPE
     create         C2W_IMAGE_PULLED C2W_BUILD_START ARG_{BOOT,POST}STRAP_N/_i/_REQ_i
     strap          C2W_M_KIND C2W_M_INDEX C2W_M_SEQ C2W_M_REQ C2W_M_PATH C2W_M_SH
                    C2W_M_COPY C2W_M_COUNT C2W_M_RESULT C2W_M_AS C2W_STRAP_START
@@ -80,7 +80,7 @@ switch ($action) {
       event   = 'create'
       time    = Now
       build_started = Quiet { (ReadStamp (Ev 'C2W_BUILD_START')).ToString('yyyy-MM-ddTHH:mm:ssZ') }
-      command = [ordered]@{ line = "container2wsl.bat $(Ev 'C2W_ARGV')".TrimEnd(); cwd = (Ev 'C2W_CWD') }
+      command = [ordered]@{ line = "container2wsl.bat $(Ev 'C2W_ARGV')".TrimEnd(); cwd = (Ev 'C2W_CWD'); recipe = (Ev 'C2W_RECIPE') }
       image   = [ordered]@{
         requested = $ref
         id        = $(if ($img) { $img.Id } else { $null })

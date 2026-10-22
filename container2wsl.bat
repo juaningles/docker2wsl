@@ -8,6 +8,9 @@ set "C2W_CWD=%CD%"
 set "C2W_PRIVATE_DIRS_IN=%C2W_PRIVATE_DIRS%"
 :: Same for C2W_TARGET (default for --target): the script sets it for the straps.
 set "C2W_TARGET_IN=%C2W_TARGET%"
+:: Set only when this run was started by --recipe (see :recipe_run); recorded in the manifest.
+set "C2W_RECIPE=%_C2W_FROM_RECIPE%"
+set "_C2W_FROM_RECIPE="
 :: Script folder, captured before argument parsing: plain `shift` also shifts %0,
 :: so %~dp0 is wrong in the main flow afterwards (subroutines are fine).
 set "C2W_SCRIPT_DIR=%~dp0"
@@ -34,6 +37,9 @@ setlocal enabledelayedexpansion
 ::                            docker/podman container named after --name
 ::    --commit <image:tag>    Container target: also save the result as an image
 ::    --dry-run               Parse and print config, do not execute
+::    --recipe <name|file>    Defaults from a recipe: <private overlay>\recipes\<name>.conf
+::                            (or a .conf path); the other arguments still override them
+::    --recipes               List the recipes in the private overlays
 ::    --help,     -h          Show this help
 ::
 ::  Bootstrap variables (use %VAR% syntax in bootstrap files):
@@ -56,6 +62,12 @@ setlocal enabledelayedexpansion
 :: ============================================================
 
 set "VERSION=1.0.0"
+
+:: --- Recipes: --recipe expands into arguments and the script runs again with them ---
+set "_RCP=" & set "_RCP_SET=0" & set "_RCP_LIST=0" & set "_RCP_REST=" & set "_RCP_PRIV="
+call :recipe_scan %*
+if "%_RCP_LIST%"=="1" goto :recipe_list_exit
+if "%_RCP_SET%"=="1" goto :recipe_run
 set "SCRIPT_NAME=%~n0"
 
 :: --- Defaults (C2W_LOCATION overrides the storage root for every build) ---
@@ -434,6 +446,8 @@ echo  --target T          wsl (default, or C2W_TARGET) or container: a running d
 echo                       container named NAME instead of a WSL distro
 echo  --commit IMAGE:TAG   container target: also save the result as an image
 echo  --dry-run            Show resolved config without executing
+echo  --recipe NAME        Defaults from ^<private overlay^>\recipes\NAME.conf ^(or a .conf path^);
+echo                       the other arguments override them. --recipes lists them.
 echo  --help,     -h       Show this help
 echo.
 echo Examples:
@@ -693,6 +707,120 @@ echo           Start  : wsl -d %ARG_WSL_NAME%
 if "%C2W_MANIFEST%"=="1" echo           Record : cat /etc/container2wsl/manifest.jsonl  (copy: %INSTALL_PATH%\container2wsl-manifest.jsonl)
 echo.
 exit /b 0
+
+
+:: ============================================================
+::  RECIPES (--recipe NAME | --recipes)
+::  A recipe is a key=value file in a private overlay's recipes\ folder: image, name, user,
+::  location, bootstraps, poststraps, target, commit, extra (engine and arch are for
+::  container2x.sh). It expands into arguments placed BEFORE the ones given here, and the
+::  script runs again, so command line arguments win ("last one wins").
+:: ============================================================
+
+:recipe_scan
+:: Split the command line into --recipe / --recipes and everything else (_RCP_REST).
+if "%~1"=="" goto :eof
+if "%~1"=="--recipes" (
+    set "_RCP_LIST=1"
+    shift
+    goto :recipe_scan
+)
+if "%~1"=="--recipe" (
+    set "_RCP_SET=1"
+    set "_RCP=%~2"
+    if not "%~2"=="" shift
+    shift
+    goto :recipe_scan
+)
+if "%~1"=="--private" if not "%~2"=="" set "_RCP_PRIV=!_RCP_PRIV!;%~f2"
+set "_RCP_REST=!_RCP_REST! %1"
+shift
+goto :recipe_scan
+
+:recipe_dirs
+:: Folders to search, ; separated in _RD: --private given here, else C2W_PRIVATE_DIRS, else
+:: sibling folders with a .devtools-overlay marker (the same rule as the build itself).
+set "_RD="
+if defined _RCP_PRIV (
+    set "_RD=!_RCP_PRIV:~1!"
+    goto :eof
+)
+if defined C2W_PRIVATE_DIRS (
+    set "_RD=%C2W_PRIVATE_DIRS%"
+    goto :eof
+)
+for /d %%d in ("%C2W_SCRIPT_DIR%..\*") do if exist "%%~fd\.devtools-overlay" set "_RD=!_RD!;%%~fd"
+if defined _RD set "_RD=!_RD:~1!"
+goto :eof
+
+:recipe_list
+call :recipe_dirs
+echo Recipes ^(name, overlay, image^):
+if not defined _RD (
+    echo   none: no private overlay folders found ^(--private, C2W_PRIVATE_DIRS or a sibling .devtools-overlay marker^)
+    goto :eof
+)
+for %%o in ("!_RD:;=" "!") do for %%r in ("%%~o\recipes\*.conf") do (
+    set "_IMG="
+    for /f "usebackq eol=# tokens=1,* delims==" %%k in ("%%~fr") do if "%%k"=="image" set "_IMG=%%l"
+    echo   %%~nr  ^(%%~nxo^)  !_IMG!
+)
+goto :eof
+
+:recipe_list_exit
+call :recipe_list
+exit /b 0
+
+:recipe_run
+if "%_RCP%"=="" (
+    echo [ERROR] --recipe needs a recipe name or a .conf path.
+    call :recipe_list
+    exit /b 2
+)
+set "_RF="
+for %%f in ("%_RCP%") do set "_RN=%%~nf"
+echo "%_RCP%" | findstr /r /c:"[\\/]" /c:"\.conf" >nul 2>&1
+if not errorlevel 1 for %%f in ("%_RCP%") do set "_RF=%%~ff"
+if defined _RF if not exist "!_RF!" (
+    echo [ERROR] Recipe file not found: !_RF!
+    exit /b 2
+)
+if not defined _RF call :recipe_dirs
+if not defined _RF if defined _RD for %%o in ("!_RD:;=" "!") do if exist "%%~o\recipes\%_RCP%.conf" set "_RF=%%~o\recipes\%_RCP%.conf"
+if not defined _RF (
+    echo [ERROR] No recipe "%_RCP%" in the recipes folder of any private overlay.
+    call :recipe_list
+    exit /b 2
+)
+for %%v in (image name user location bootstraps poststraps extra target commit engine arch) do set "R_%%v="
+for /f "usebackq eol=# tokens=1,* delims==" %%k in ("!_RF!") do set "R_%%k=%%l"
+if not defined R_image (
+    echo [ERROR] Recipe !_RF! has no image= line.
+    exit /b 2
+)
+if not defined R_name set "R_name=!_RN!"
+set "_RA=!R_image! -n !R_name!"
+if defined R_user set "_RA=!_RA! -u !R_user!"
+if defined R_location set "_RA=!_RA! -l "!R_location!""
+if defined R_bootstraps for %%b in (!R_bootstraps!) do set "_RA=!_RA! -b %%b"
+if defined R_poststraps for %%p in (!R_poststraps!) do set "_RA=!_RA! -p %%p"
+if defined R_target set "_RA=!_RA! --target !R_target!"
+:: commit= applies only when this build is a container: recipe target=container, C2W_TARGET, or
+:: --target container on the command line (--target wsl there turns it off)
+if defined R_commit (
+    set "_CT=0"
+    if /i "!R_target!"=="container" set "_CT=1"
+    if not defined R_target if /i "%C2W_TARGET%"=="container" set "_CT=1"
+    echo "!_RCP_REST!" | findstr /i /c:"--target container" >nul && set "_CT=1"
+    echo "!_RCP_REST!" | findstr /i /c:"--target wsl" >nul && set "_CT=0"
+    if "!_CT!"=="1" set "_RA=!_RA! --commit !R_commit!"
+)
+if defined R_extra set "_RA=!_RA! !R_extra!"
+echo container2wsl: recipe !_RF!
+echo container2wsl: !_RA!!_RCP_REST!
+set "_C2W_FROM_RECIPE=!_RF!"
+call "%~f0" !_RA!!_RCP_REST!
+exit /b !errorlevel!
 
 
 :: ============================================================

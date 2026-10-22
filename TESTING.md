@@ -154,10 +154,19 @@ target), the dry-run plan and mount list, `C2W_TARGET` as the default, a build t
 (`ENTRYPOINT []` reset), run and commit failures, and `systemd-enable` / `podman-machine` skipping
 themselves.
 
+### `test_08_recipe.bat` — Recipes (--dry-run, NO MOCKS)
+
+`--recipes` lists recipes from `--private` folders; `--recipe NAME` applies `user=`, `bootstraps=`,
+`poststraps=`, names the build after the file, and ignores `commit=` for a WSL build; command line
+`-n` / `-u` override it; `--target container` (or `target=container` in the recipe) builds a
+container and then `commit=` applies; with `C2W_PRIVATE_DIRS=a;b` the recipe in `b` wins; a `.conf`
+path works; a missing recipe, a recipe without `image=` and a missing path fail with a message; the
+`rebuild-wsl.bat` wrapper lists with no arguments and forwards a recipe plus overrides.
+
 ### `tests/sh/` — container2x.sh (macOS / Linux)
 
 ```bash
-tests/sh/run.sh            # mock suite: 80 checks, every engine, no engine installed needed
+tests/sh/run.sh            # mock suite: 103 checks, every engine, no engine installed needed
 tests/sh/run.sh --real     # mock suite, then tests/sh/real.sh
 bash tests/sh/real.sh podman   # real builds for one engine only
 ```
@@ -166,8 +175,9 @@ bash tests/sh/real.sh podman   # real builds for one engine only
 call. It covers arguments, rendering (expanded `%C2W_*%`, untouched undefined `%NAME%` and `%%`,
 dropped comments), overlay strap lookup, the run/exec/commit command lines per engine (Apple: `list
 --all --quiet`, `--arch`, no `--hostname`, `delete --force`, commit then build, and the fallback when
-build fails), existing containers, failures, the manifest (read back with `lib/c2w-manifest`), and
-the ssh folder mode check. Run it under bash 3.2 as well, since that is what macOS ships:
+build fails), existing containers, failures, the manifest (read back with `lib/c2w-manifest`),
+the ssh folder mode check, and recipes (`--recipe`, `--recipes`, overrides, last overlay wins, the
+recorded recipe, the `rebuild-container` wrapper). Run it under bash 3.2 as well, since that is what macOS ships:
 
 ```cmd
 podman run --rm -v C:\code\docker2wsl:/src:ro docker.io/library/bash:3.2 bash -c "cp -r /src /w && cd /w && bash tests/sh/run.sh"

@@ -139,6 +139,40 @@ has "$OUT" 'TARGET="container"' "skip: C2W_TARGET rendered into the straps"
 has "$OUT" "wsl.conf is WSL-only" "skip: systemd-enable checks the target"
 has "$OUT" "not applicable in a container" "skip: podman-machine checks the target"
 
+t "recipes (--recipe / --recipes, rebuild-container)"
+reset
+RA="$TMP/rcp_a"; RB="$TMP/rcp_b"; mkdir -p "$RA/recipes" "$RB/recipes"
+printf '# dev\nimage=ubuntu:24.04\nuser=rcpuser\nbootstraps=sudo\npoststraps=uv\nengine=podman\narch=arm64\ncommit=localhost/rcp:1\n' > "$RA/recipes/dev.conf"
+printf 'image=alpine:3.19\n' > "$RA/recipes/dup.conf"; printf 'image=debian:12\n' > "$RB/recipes/dup.conf"
+printf 'user=nobody\n' > "$RB/recipes/noimage.conf"
+c2x --recipes --private "$RA"; rc0 $? "recipes: list exit 0"
+has "$OUT" "dev          (rcp_a)  ubuntu:24.04" "recipes: name, overlay and image"
+c2x --recipe dev --private "$RA" --dry-run; rc0 $? "recipe: exit 0"
+has "$OUT" "container2x: recipe $RA/recipes/dev.conf" "recipe: recipe file shown"
+has "$OUT" "Container: dev (podman, via podman)" "recipe: name from the file, engine= applied"
+has "$OUT" "User     : rcpuser" "recipe: user= applied"
+has "$OUT" "Image    : ubuntu:24.04 (arm64)" "recipe: arch= applied"
+has "$OUT" "Commit   : localhost/rcp:1" "recipe: commit= applied"
+has "$OUT" "Bootstrap: $ROOT/bootstraps/sudo" "recipe: bootstraps= applied"
+c2x --recipe dev --private "$RA" -n other --engine docker -u someone --dry-run
+has "$OUT" "Container: other (docker, via docker)" "recipe override: -n and --engine win"
+has "$OUT" "User     : someone" "recipe override: -u wins"
+C2W_PRIVATE_DIRS="$RA:$RB" c2x --recipe dup --engine docker --dry-run
+has "$OUT" "Image    : debian:12" "recipe dup: the overlay listed last wins"
+c2x --recipe "$RA/recipes/dup.conf" --engine docker --dry-run
+has "$OUT" "Image    : alpine:3.19" "recipe path: a .conf path is used as given"
+c2x --recipe none --private "$RA"; rcn $? "recipe missing: non-zero exit"; has "$OUT" "No recipe" "recipe missing: message"
+c2x --recipe noimage --private "$RB"; rcn $? "recipe noimage: non-zero exit"; has "$OUT" "has no image= line" "recipe noimage: message"
+c2x --recipe; rcn $? "recipe no value: non-zero exit"
+c2x --recipe dev --private "$RA" --engine docker -n r1
+rc0 $? "recipe build: exit 0"
+sh "$ROOT/lib/c2w-manifest" -f "$TMP/records/r1/container2wsl-manifest.jsonl" > "$TMP/report.txt" 2>&1
+has "$TMP/report.txt" "Recipe    $RA/recipes/dev.conf" "recipe build: manifest records the recipe"
+C2W_PRIVATE_DIRS="$RA" bash "$ROOT/rebuild-container" > "$OUT" 2>&1
+has "$OUT" "dev          (rcp_a)" "rebuild-container: no arguments lists the recipes"
+C2W_PRIVATE_DIRS="$RA" bash "$ROOT/rebuild-container" dev -n w1 --dry-run > "$OUT" 2>&1
+rc0 $? "rebuild-container: exit 0"; has "$OUT" "Container: w1 (podman" "rebuild-container: forwards the recipe and overrides"
+
 echo
 printf ' Assertions: %d passed, %d failed\n' "$PASS" "$FAIL"
 RC=0; [ "$FAIL" = 0 ] || RC=1

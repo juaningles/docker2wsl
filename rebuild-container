@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# rebuild-container - build a running container from a recipe: container2x.sh --recipe NAME [args...]
+#   rebuild-container                  list the recipes in the private overlays
+#   rebuild-container NAME [args...]   build <private overlay>/recipes/NAME.conf; args override
+# macOS / Linux, engines docker, podman or Apple container. Recipes and their keys: README "Recipes".
+SELF="$0"; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case "$L" in /*) SELF="$L" ;; *) SELF="$(dirname "$SELF")/$L" ;; esac; done
+HERE=$(cd "$(dirname "$SELF")" && pwd -P)
+if [ $# -eq 0 ]; then exec bash "$HERE/container2x.sh" --recipes; fi
+exec bash "$HERE/container2x.sh" --recipe "$@"

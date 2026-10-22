@@ -108,7 +108,7 @@ function dflt(a, b) { return a != "" ? a : b }
     HAVE = 1
     name = v("distro.name"); user = v("distro.user"); dos = v("distro.os"); ipath = v("distro.install_path")
     replaced = v("distro.replaced_existing")
-    ctime = v("time"); cmd = v("command.line"); cwd = v("command.cwd")
+    ctime = v("time"); cmd = v("command.line"); cwd = v("command.cwd"); recipe = v("command.recipe")
     img = v("image.requested"); iid = v("image.id"); pulled = v("image.pulled")
     ios = v("image.os"); iarch = v("image.arch"); icreated = v("image.created"); isize = v("image.size")
     nd = cnt("image.digests"); for (i = 0; i < nd; i++) dig[i] = v("image.digests[" i "]")
@@ -152,6 +152,7 @@ END {
   printf "Stored    %s\n", dflt(ipath, "?")
   printf "Command   %s\n", cmd
   if (cwd != "") printf "          (run in %s)\n", cwd
+  if (recipe != "") printf "Recipe    %s\n", recipe
   printf "Image     %s  (pulled this build: %s)\n", img, yn(pulled)
   if (iid != "") printf "  id      %s\n", iid
   for (i = 0; i < nd; i++) printf "  digest  %s\n", dig[i]

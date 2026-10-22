@@ -20,6 +20,8 @@
 #                            ~/.local/share/container2x); DIR/NAME/container2wsl-manifest.jsonl
 #     -f, --force            replace an existing container of that name
 #         --dry-run          show the plan and the rendered straps, change nothing
+#         --recipe NAME      defaults from <private overlay>/recipes/NAME.conf (or a .conf path);
+#                            the other arguments still override them. --recipes lists them.
 #     -h, --help
 # Bare strap names resolve from bootstraps/ or poststraps/ next to this script, then from each
 # private folder's straps/, bootstraps/ and poststraps/. Host folders the straps read are
@@ -35,7 +37,70 @@ ARGV="$*"; CWD=$(pwd)
 say()  { printf '%s\n' "$*"; }
 die()  { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 warn() { printf '      [WARN] %s\n' "$*"; }
-usage() { sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,28p' "$SELF" | sed 's/^# \{0,1\}//'; }
+
+# ---------------------------------------------------------------- recipes
+# --recipe expands a recipe (key=value: image name user bootstraps poststraps engine arch commit
+# extra; location and target are for container2wsl.bat) into arguments placed BEFORE the others,
+# then runs this script again, so command line arguments win ("last one wins").
+RECIPE="${_C2X_FROM_RECIPE:-}"; unset _C2X_FROM_RECIPE
+_rc= _rc_set=0 _rc_list=0; _rest=(); _rpriv=(); _a=("$@"); _i=0
+while [ $_i -lt ${#_a[@]} ]; do
+  case "${_a[$_i]}" in
+    --recipes) _rc_list=1 ;;
+    --recipe) _rc_set=1; _i=$((_i+1)); _rc="${_a[$_i]:-}" ;;
+    --private) _rest+=(--private); _i=$((_i+1)); _rest+=("${_a[$_i]:-}")
+               [ -d "${_a[$_i]:-/nonexistent}" ] && _rpriv+=("$(cd "${_a[$_i]}" && pwd -P)") ;;
+    *) _rest+=("${_a[$_i]}") ;;
+  esac
+  _i=$((_i+1))
+done
+recipe_dirs() {   # one folder per line: --private given, else C2W_PRIVATE_DIRS, else marked siblings
+  local d
+  if [ ${#_rpriv[@]} -gt 0 ]; then printf '%s\n' "${_rpriv[@]}"
+  elif [ -n "${C2W_PRIVATE_DIRS:-}" ]; then printf '%s\n' "$C2W_PRIVATE_DIRS" | tr ':' '\n'
+  else for d in "$SCRIPT_DIR"/../*/; do [ -f "$d.devtools-overlay" ] && (cd "$d" && pwd -P); done; fi
+}
+recipe_list() {
+  echo "Recipes (name, overlay, image):"
+  local d f n=0
+  while IFS= read -r d; do
+    for f in "$d"/recipes/*.conf; do
+      [ -f "$f" ] || continue; n=$((n+1))
+      printf '  %-12s (%s)  %s\n' "$(basename "$f" .conf)" "$(basename "$d")" "$(sed -n 's/^image=//p' "$f" | tr -d '\r' | tail -1)"
+    done
+  done <<EOF
+$(recipe_dirs)
+EOF
+  [ $n -gt 0 ] || echo "  none: no recipes/*.conf in the private overlay folders (--private, C2W_PRIVATE_DIRS or a sibling .devtools-overlay marker)"
+}
+if [ "$_rc_list" = 1 ]; then recipe_list; exit 0; fi
+if [ "$_rc_set" = 1 ]; then
+  [ -n "$_rc" ] || { echo "[ERROR] --recipe needs a recipe name or a .conf path." >&2; recipe_list >&2; exit 2; }
+  _rf=
+  case "$_rc" in
+    */*|*.conf) [ -f "$_rc" ] || { echo "[ERROR] Recipe file not found: $_rc" >&2; exit 2; }; _rf="$(cd "$(dirname "$_rc")" && pwd -P)/$(basename "$_rc")" ;;
+    *) while IFS= read -r _d; do [ -n "$_d" ] && [ -f "$_d/recipes/$_rc.conf" ] && _rf="$_d/recipes/$_rc.conf"; done <<EOF
+$(recipe_dirs)
+EOF
+       ;;
+  esac
+  [ -n "$_rf" ] || { echo "[ERROR] No recipe \"$_rc\" in the recipes folder of any private overlay." >&2; recipe_list >&2; exit 2; }
+  _get() { sed -n "s/^$1=//p" "$_rf" | tr -d '\r' | tail -1; }
+  _v=$(_get image); [ -n "$_v" ] || { echo "[ERROR] Recipe $_rf has no image= line." >&2; exit 2; }
+  _ra=("$_v"); _v=$(_get name); _ra+=(-n "${_v:-$(basename "$_rf" .conf)}")
+  _v=$(_get user); [ -n "$_v" ] && _ra+=(-u "$_v")
+  for _x in $(_get bootstraps); do _ra+=(-b "$_x"); done
+  for _x in $(_get poststraps); do _ra+=(-p "$_x"); done
+  _v=$(_get engine); [ -n "$_v" ] && _ra+=(--engine "$_v")
+  _v=$(_get arch); [ -n "$_v" ] && _ra+=(--arch "$_v")
+  _v=$(_get commit); [ -n "$_v" ] && _ra+=(--commit "$_v")
+  _v=$(_get extra); if [ -n "$_v" ]; then read -r -a _ex <<< "$_v"; _ra+=("${_ex[@]}"); fi
+  echo "container2x: recipe $_rf"
+  echo "container2x: ${_ra[*]} ${_rest[*]+${_rest[*]}}"
+  export _C2X_FROM_RECIPE="$_rf"
+  exec bash "$SELF" "${_ra[@]}" ${_rest[@]+"${_rest[@]}"}
+fi
 
 # ---------------------------------------------------------------- arguments
 IMAGE= NAME= USER_NAME= ENGINE="${C2W_ENGINE:-}" ARCH= COMMIT= FORCE=0 DRY=0
@@ -238,7 +303,7 @@ m_create() {
   os=$(e_exec root sh -c '. /etc/os-release 2>/dev/null && printf %s "$PRETTY_NAME"' 2>/dev/null || true)
   for p in ${PRIV[@]+"${PRIV[@]}"}; do [ $first = 1 ] || priv="$priv,"; first=0; priv="$priv{\"path\":$(js "$p"),\"git\":$(gitj "$p")}"; done; priv="$priv]"
   m_write "{\"schema\":1,\"event\":\"create\",\"time\":\"$(now)\",\"build_started\":\"$BUILD_TIME\",\
-\"command\":{\"line\":$(js "container2x.sh $ARGV"),\"cwd\":$(js "$CWD")},\
+\"command\":{\"line\":$(js "container2x.sh $ARGV"),\"cwd\":$(js "$CWD"),\"recipe\":$(jsn "$RECIPE")},\
 \"image\":{\"requested\":$(js "$IMAGE"),\"id\":null,\"digests\":[],\"tags\":[],\"pulled\":$PULLED,\"arch\":$(jsn "$ARCH")},\
 \"distro\":{\"name\":$(js "$NAME"),\"user\":$(js "$USER_NAME"),\"install_path\":$(js "$LOCATION/$NAME"),\"os\":$(jsn "$os"),\
 \"replaced_existing\":$([ "$FORCE" = 1 ] && echo true || echo false),\"target\":\"container\",\"engine\":\"$ENGINE\",\"commit\":$(jsn "$COMMIT")},\

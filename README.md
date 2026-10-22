@@ -47,6 +47,8 @@ Options:
   --force,    -f          Overwrite existing WSL distro with same name
   --target <wsl|container>  WSL distro (default, or C2W_TARGET) or a running container
   --commit <image:tag>    Container target: also save the result as an image
+  --recipe <name|file>    Defaults from a recipe (see Recipes); the other arguments override them
+  --recipes               List the recipes in the private overlays
   --dry-run               Parse and print config, do not execute
   --help,     -h          Show help
 ```
@@ -254,6 +256,41 @@ A `--force` rebuild keeps the previous Windows copy as `container2wsl-manifest.p
 
 The manifest needs `lib\manifest.ps1` next to `container2wsl.bat`. Without it the script still works on its own; the banner says `Manifest : off` and nothing is recorded. Writing the manifest never fails a build: a problem only prints a `[WARN]`.
 
+## Recipes
+
+A recipe saves a build's options in a file, so `rebuild-wsl zdev` replaces a long command line. Recipes
+live in the `recipes/` folder of a private overlay, one `<name>.conf` each, and container2wsl finds
+them in the same overlay folders it detects for the build (see [Private overlays](#private-overlays)).
+
+```cmd
+container2wsl.bat --recipes                          :: list them (name, overlay, image)
+container2wsl.bat --recipe zdev                      :: build from <overlay>\recipes\zdev.conf
+container2wsl.bat --recipe zdev -n zdev2 --force     :: anything after it overrides the recipe
+container2wsl.bat --recipe zdev --target container   :: the same recipe as a running container
+container2wsl.bat --recipe D:\x\dev.conf             :: a recipe file by path
+rebuild-wsl zdev --force                             :: shorthand: rebuild-wsl.bat in this folder
+```
+
+On macOS / Linux the same recipes work with `container2x.sh --recipe NAME` or `./rebuild-container NAME`.
+
+Format: `key=value` lines, no spaces around `=`, comments on their own line starting with `#`.
+
+| key | meaning |
+|---|---|
+| `image` | required |
+| `name` | distro / container name (default: the file name) |
+| `user` | user to create |
+| `bootstraps`, `poststraps` | space-separated strap names or paths |
+| `location` | container2wsl.bat `-l` |
+| `target` | container2wsl.bat: `wsl` or `container` |
+| `commit` | image to commit to; used only when the build is a container, so a WSL recipe can carry it |
+| `engine`, `arch` | container2x.sh: `docker` / `podman` / `apple`, and the image architecture |
+| `extra` | other arguments, passed as written |
+
+The recipe becomes arguments placed before the ones on the command line, so the command line wins.
+When two overlays have a recipe of the same name, the one listed last wins (name order for detected
+siblings, like overlay aliases). The build manifest records which recipe was used.
+
 ## Container targets
 
 The straps, private overlays, recipes and manifest also build a **running container**, for when a
@@ -287,9 +324,8 @@ command is the user's login shell (bind mounts are not part of the image). `--fo
 existing container of the same name. Straps that only make sense in WSL (`systemd-enable`,
 `podman-machine`) skip themselves.
 
-Recipes work for both: `rebuild-wsl NAME --target container` on Windows, and devtools'
-`rebuild-container NAME` on macOS / Linux. Recipe keys `target=`, `commit=`, `engine=` and
-`arch=` set the defaults.
+[Recipes](#recipes) work for both: `rebuild-wsl NAME --target container` on Windows, and
+`./rebuild-container NAME` on macOS / Linux.
 
 ## Testing
 

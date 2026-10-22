@@ -29,6 +29,14 @@ it must stay bash 3.2 compatible (macOS `/bin/bash`): no associative arrays, `ma
 and guard empty arrays under `set -u` with `${a[@]+"${a[@]}"}`. docs/RUNNERS.md is the contract both
 keep (rendering rules, variables, mounts, manifest).
 
+**Recipes** (`--recipe NAME`, `--recipes`; `:recipe_*` labels, run before anything else):
+`:recipe_scan` splits the command line, `:recipe_run` finds `<overlay>\recipes\NAME.conf`
+(`:recipe_dirs`: `--private`, else `C2W_PRIVATE_DIRS`, else marked siblings; the last match wins),
+turns the keys into arguments, and calls the script again with those first and the user's after, so
+the command line wins. The recipe path reaches the inner run as `_C2W_FROM_RECIPE` (cleared at the
+top, kept as `C2W_RECIPE` for the manifest). container2x.sh does the same with
+`_C2X_FROM_RECIPE` and `exec`. `rebuild-wsl.bat` / `rebuild-container` are one-line wrappers.
+
 Manifest (`:manifest`, `:manifest_strap`, `:manifest_complete`, plus `lib\manifest.ps1`):
 `create` is written after step 4, a `strap` record after each strap (pass or fail), and
 `complete` at the end or when a strap fails. The batch side passes **all** data to
@@ -70,7 +78,7 @@ These are hard-won lessons. Do not "simplify" these workarounds:
 ## Testing
 
 ```
-tests\run_tests.bat                        # run all (369 assertions)
+tests\run_tests.bat                        # run all (396 assertions)
 tests\run_tests.bat test_01                # run one file
 tests\run_tests.bat --html report.html     # generate HTML report with colors
 tests\run_tests.bat --force                # skip collision pre-check
@@ -86,6 +94,7 @@ tests\run_tests.bat --force                # skip collision pre-check
 - `test_05_poststrap` tests poststrap execution (mocked)
 - `test_06_manifest` tests the build manifest (mocked; `manifest_summary.ps1` parses the JSON Lines)
 - `test_07_container` tests `--target container` (mocked docker; the wsl mock must never be called)
+- `test_08_recipe` tests `--recipe` / `--recipes` and the `rebuild-wsl.bat` wrapper (dry runs)
 - `tests/sh/run.sh` (bash, run from WSL/Linux/macOS) tests `container2x.sh` with `tests/sh/mock-engine`;
   run it under bash 3.2 too: `podman run --rm -v C:\code\docker2wsl:/src:ro docker.io/library/bash:3.2 bash -c 'cp -r /src /w && cd /w && bash tests/sh/run.sh'`
 - `tests/sh/real.sh` does real builds; the Apple suite only runs on a Mac, so a real Apple run is
@@ -98,6 +107,8 @@ tests\run_tests.bat --force                # skip collision pre-check
 ```
 container2wsl.bat            # main script (works alone): WSL distro, or --target container
 container2x.sh               # macOS/Linux runner: running container via docker, podman or Apple container
+rebuild-wsl.bat              # shorthand: container2wsl.bat --recipe NAME (alone: --recipes)
+rebuild-container            # shorthand: container2x.sh --recipe NAME (alone: --recipes)
 docs/RUNNERS.md              # the contract both runners keep (rendering, variables, mounts, manifest)
 lib/
   manifest.ps1               # optional: build manifest (JSON Lines) writer
@@ -134,6 +145,7 @@ tests/
   test_05_poststrap.bat      # poststrap feature tests (mocked)
   test_06_manifest.bat       # build manifest tests (mocked)
   test_07_container.bat      # --target container tests (mocked docker; no wsl calls allowed)
+  test_08_recipe.bat         # --recipe / --recipes and rebuild-wsl.bat (--dry-run, no mocks)
   sh/run.sh                  # container2x.sh mock suite (bash 3.2+); --real adds sh/real.sh
   sh/real.sh                 # real container2x.sh builds per engine; SKIP where an engine is missing
   sh/mock-engine             # fake docker / podman / container CLI (behaves by the name it is called as)
