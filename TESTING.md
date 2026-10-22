@@ -210,9 +210,12 @@ cd docker2wsl && tests/sh/run.sh --real
 ```
 
 Expect the mock suite to pass and `real: apple`, all checks PASS, with `arm64 userland` among
-them. The Apple engine has only been exercised with mocks so far, so this run is its first real
-test. If `--commit` falls back (the `container build` step fails), the image keeps the `sleep`
-entrypoint and the "committed image starts as tester" check fails. A failed build prints the last
+them. Last verified 2026-10-22 on macOS 26.6 (Apple silicon) with Apple's container CLI 1.1.0
+(13/13) and Docker 29.7 (12/12). Over ssh, macOS starts with a minimal PATH; put Homebrew first:
+`PATH=/opt/homebrew/bin:/usr/local/bin:$PATH tests/sh/run.sh --real`.
+
+`--commit` on Apple stops the container, exports it, starts it again and builds the image; a failure
+in any of those steps fails the build with the step's last log lines. A failed build prints the last
 lines of its log under the FAIL line; for more, rerun one engine with
 `bash -x tests/sh/real.sh apple`.
 

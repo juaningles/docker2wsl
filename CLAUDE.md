@@ -183,6 +183,6 @@ tests/
 | `C2X_MOCK_LOG` | (unset) | every call appended as `<name> <args>` |
 | `C2X_MOCK_IMAGE_EXISTS` | 1 | 0 = image inspect fails (triggers a pull) |
 | `C2X_MOCK_EXISTS` | 0 | 1 = the container already exists (`C2X_MOCK_NAME` is what Apple `list` prints) |
-| `C2X_MOCK_RUN_FAIL`, `C2X_MOCK_STRAP_FAIL`, `C2X_MOCK_COMMIT_FAIL`, `C2X_MOCK_BUILD_FAIL` | 0 | 1 = that step fails (`BUILD` is Apple's commit fallback) |
+| `C2X_MOCK_RUN_FAIL`, `C2X_MOCK_STRAP_FAIL`, `C2X_MOCK_COMMIT_FAIL`, `C2X_MOCK_BUILD_FAIL` | 0 | 1 = that step fails (`BUILD` is the build in Apple's commit step) |
 | `C2X_MOCK_SCRIPTS` | (unset) | folder that receives a copy of every rendered script run through exec |
 | `C2X_MOCK_SHELL` | /usr/bin/zsh | login shell reported by `getent passwd` |
