@@ -4,6 +4,9 @@
 # Also keeps Windows interop working: every distro shares one WSLInterop binfmt entry, and a
 # booting systemd (systemd-binfmt) clears it for ALL distros unless a binfmt.d file re-adds it
 # (microsoft/WSL#8843). Without interop no distro can start powershell.exe, cmd.exe, code, ...
+TARGET="%C2W_TARGET%"
+case "$TARGET" in *C2W_TARGET*) TARGET="${C2W_TARGET:-wsl}" ;; esac
+if [ "$TARGET" = container ]; then echo "systemd-enable: not applicable in a container (wsl.conf is WSL-only); skipped"; exit 0; fi
 grep -qxF '[boot]' /etc/wsl.conf 2>/dev/null || printf '\n[boot]\nsystemd=true\n' >> /etc/wsl.conf
 sed -i 's/^systemd=false/systemd=true/' /etc/wsl.conf
 mkdir -p /etc/binfmt.d

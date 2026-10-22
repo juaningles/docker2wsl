@@ -6,6 +6,8 @@ set "C2W_CWD=%CD%"
 :: An inherited C2W_PRIVATE_DIRS is an input (default for --private); the script rebuilds the
 :: variable itself, so keep the caller's value under another name.
 set "C2W_PRIVATE_DIRS_IN=%C2W_PRIVATE_DIRS%"
+:: Same for C2W_TARGET (default for --target): the script sets it for the straps.
+set "C2W_TARGET_IN=%C2W_TARGET%"
 :: Script folder, captured before argument parsing: plain `shift` also shifts %0,
 :: so %~dp0 is wrong in the main flow afterwards (subroutines are fine).
 set "C2W_SCRIPT_DIR=%~dp0"
@@ -28,6 +30,9 @@ setlocal enabledelayedexpansion
 ::                            (semicolon list), else sibling folders of this script that
 ::                            contain a .devtools-overlay marker file.
 ::    --force,    -f          Overwrite existing WSL distro with same name
+::    --target <wsl|container>  Build a WSL distro (default, or C2W_TARGET) or a running
+::                            docker/podman container named after --name
+::    --commit <image:tag>    Container target: also save the result as an image
 ::    --dry-run               Parse and print config, do not execute
 ::    --help,     -h          Show this help
 ::
@@ -35,6 +40,8 @@ setlocal enabledelayedexpansion
 ::    %C2W_NAME%       WSL distro name
 ::    %C2W_USER%       Default Linux user
 ::    %C2W_IMAGE%      Docker image name
+::    %C2W_TARGET%     wsl or container
+::    %C2W_ENGINE%     wsl, docker or podman
 ::    %C2W_LOCATION%   WSL storage root path
 ::    %C2W_SCRIPT_DIR%       this script's folder (Windows, trailing \)
 ::    %C2W_SCRIPT_DIR_LX%    the same as /mnt/<drive>/... (no trailing /)
@@ -67,6 +74,8 @@ set "ARG_WSL_LOCATION="
 set "ARG_BOOTSTRAP_N=0"
 set "ARG_POSTSTRAP_N=0"
 set "ARG_PRIVATE_N=0"
+set "ARG_TARGET="
+set "ARG_COMMIT="
 
 :: ============================================================
 ::  ARGUMENT PARSING
@@ -89,6 +98,8 @@ if "%~1"=="-b"          goto :arg_bootstrap
 if "%~1"=="--poststrap" goto :arg_poststrap
 if "%~1"=="-p"          goto :arg_poststrap
 if "%~1"=="--private"   goto :arg_private
+if "%~1"=="--target"    goto :arg_target
+if "%~1"=="--commit"    goto :arg_commit
 if not defined ARG_IMAGE goto :arg_image
 echo [ERROR] Unexpected argument: %~1
 echo.
@@ -279,6 +290,28 @@ shift
 shift
 goto :parse_args
 
+:arg_target
+if "%~2"=="" (
+    echo [ERROR] Missing value for option: %~1
+    echo.
+    goto :show_help_error
+)
+set "ARG_TARGET=%~2"
+shift
+shift
+goto :parse_args
+
+:arg_commit
+if "%~2"=="" (
+    echo [ERROR] Missing value for option: %~1
+    echo.
+    goto :show_help_error
+)
+set "ARG_COMMIT=%~2"
+shift
+shift
+goto :parse_args
+
 :arg_image
 set "ARG_IMAGE=%~1"
 shift
@@ -293,6 +326,18 @@ if not defined ARG_IMAGE (
 )
 
 :: --- Apply defaults ---
+if not defined ARG_TARGET if defined C2W_TARGET_IN set "ARG_TARGET=%C2W_TARGET_IN%"
+if not defined ARG_TARGET set "ARG_TARGET=wsl"
+if /i "%ARG_TARGET%"=="wsl" set "ARG_TARGET=wsl"
+if /i "%ARG_TARGET%"=="container" set "ARG_TARGET=container"
+if not "%ARG_TARGET%"=="wsl" if not "%ARG_TARGET%"=="container" (
+    echo [ERROR] --target must be wsl or container, not: %ARG_TARGET%
+    exit /b 1
+)
+if defined ARG_COMMIT if "%ARG_TARGET%"=="wsl" (
+    echo [ERROR] --commit needs --target container.
+    exit /b 1
+)
 if not defined ARG_WSL_USER     set "ARG_WSL_USER=%DEFAULT_USER%"
 if not defined ARG_WSL_LOCATION set "ARG_WSL_LOCATION=%DEFAULT_STORAGE%"
 
@@ -384,7 +429,10 @@ echo  --bootstrap, -b FILE Run commands from FILE as root after setup (repeatabl
 echo  --poststrap, -p FILE Run commands from FILE as user after setup (repeatable)
 echo  --private DIR        Private overlay folder for straps/ssh-keys (repeatable; default:
 echo                       C2W_PRIVATE_DIRS, else siblings with a .devtools-overlay marker)
-echo  --force,    -f       Overwrite existing WSL distro with same name
+echo  --force,    -f       Overwrite existing WSL distro (or container) with same name
+echo  --target T          wsl (default, or C2W_TARGET) or container: a running docker/podman
+echo                       container named NAME instead of a WSL distro
+echo  --commit IMAGE:TAG   container target: also save the result as an image
 echo  --dry-run            Show resolved config without executing
 echo  --help,     -h       Show this help
 echo.
@@ -392,6 +440,7 @@ echo Examples:
 echo  %SCRIPT_NAME% ubuntu:22.04
 echo  %SCRIPT_NAME% ubuntu:22.04 --name mydev --user john
 echo  %SCRIPT_NAME% ubuntu:22.04 --location D:\wsl
+echo  %SCRIPT_NAME% ubuntu:24.04 --target container --name dev -u john --commit localhost/dev:1
 echo.
 exit /b %_HELP_EXIT%
 
@@ -405,18 +454,30 @@ set "WSL_CMD=wsl"
 where /q wsl.bat
 if not errorlevel 1 set "WSL_CMD=wsl.bat"
 
+:: --- Target: how commands reach the distro or container (T_ROOT / T_USER prefix them) ---
+set "C2W_TARGET=%ARG_TARGET%"
+set "C2W_ENGINE=wsl"
+set "T_ROOT=%WSL_CMD% -d %ARG_WSL_NAME% -u root --"
+set "T_USER=%WSL_CMD% -d %ARG_WSL_NAME% -u %ARG_WSL_USER% --"
+if "%ARG_TARGET%"=="container" call :ct_setup
+
 echo.
 echo  container2wsl v%VERSION%
 echo  ----------------------------------------
 echo  Image    : %ARG_IMAGE%
-echo  WSL Name : %ARG_WSL_NAME%
+if "%ARG_TARGET%"=="wsl" echo  WSL Name : %ARG_WSL_NAME%
+if "%ARG_TARGET%"=="container" echo  Container: %ARG_WSL_NAME% ^(%C2W_ENGINE%, via %DOCKER_CMD%^)
+if defined ARG_COMMIT echo  Commit   : %ARG_COMMIT%
 echo  User     : %ARG_WSL_USER%
-echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
+if "%ARG_TARGET%"=="wsl" echo  Location : %ARG_WSL_LOCATION%\%ARG_WSL_NAME%
+if "%ARG_TARGET%"=="container" echo  Records  : %ARG_WSL_LOCATION%\%ARG_WSL_NAME% ^(manifest copy only^)
+if "%ARG_TARGET%"=="container" for %%m in (!CT_MOUNT_LIST!) do echo  Mount    : %%~m
 if %ARG_BOOTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_BOOTSTRAP_N%) do echo  Bootstrap: !ARG_BOOTSTRAP_%%i!
 if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do echo  Poststrap: !ARG_POSTSTRAP_%%i!
 if defined C2W_PRIVATE_DIRS for %%d in ("!C2W_PRIVATE_DIRS:;=" "!") do echo  Private  : %%~d
 if not defined C2W_PRIVATE_DIRS echo  Private  : none (no --private, C2W_PRIVATE_DIRS or sibling .devtools-overlay marker)
-if %FORCE%==1 echo  Force    : yes (overwrite existing distro)
+if %FORCE%==1 if "%ARG_TARGET%"=="wsl" echo  Force    : yes (overwrite existing distro)
+if %FORCE%==1 if "%ARG_TARGET%"=="container" echo  Force    : yes (remove an existing container of that name)
 if exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" echo  Manifest : /etc/container2wsl/manifest.jsonl, copy in !ARG_WSL_LOCATION!\!ARG_WSL_NAME!
 if not exist "%C2W_SCRIPT_DIR%lib\manifest.ps1" echo  Manifest : off - lib\manifest.ps1 not found next to the script
 if %DRY_RUN%==1 echo  Mode     : DRY RUN (no changes will be made)
@@ -502,6 +563,8 @@ if "%C2W_MANIFEST%"=="1" powershell -noprofile -command "[DateTime]::UtcNow.ToSt
 
 :: --- Determine step count ---
 set "STEP_COUNT=4"
+if "%ARG_TARGET%"=="container" set "STEP_COUNT=3"
+if defined ARG_COMMIT set /a STEP_COUNT+=1
 if %ARG_BOOTSTRAP_N% geq 1 set /a STEP_COUNT+=1
 if %ARG_POSTSTRAP_N% geq 1 set /a STEP_COUNT+=1
 
@@ -511,6 +574,8 @@ if errorlevel 1 (
     echo [ERROR] Could not obtain Docker image: %ARG_IMAGE%
     exit /b 1
 )
+
+if "%ARG_TARGET%"=="container" goto :ct_flow
 
 :: --- Step 2: Export image to a tar archive ---
 set "EXPORT_TAR=%C2W_TMP%\c2w_%ARG_WSL_NAME%.tar"
@@ -561,6 +626,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:after_target_setup
 :: --- Manifest: source image, command line, requested straps, host ---
 call :manifest create
 
@@ -573,6 +639,7 @@ set "C2W_USER=%ARG_WSL_USER%"
 set "C2W_IMAGE=%ARG_IMAGE%"
 set "C2W_LOCATION=%ARG_WSL_LOCATION%"
 set "_NEXT_STEP=5"
+if "%ARG_TARGET%"=="container" set "_NEXT_STEP=4"
 if %ARG_BOOTSTRAP_N% geq 1 (
     set "BOOTSTRAP_STEP=!_NEXT_STEP!"
     set /a _NEXT_STEP+=1
@@ -612,6 +679,7 @@ if %ARG_POSTSTRAP_N% geq 1 (
 if exist "%EXPORT_TAR%" del /f /q "%EXPORT_TAR%" >nul 2>&1
 
 set "C2W_M_FAILED="
+if "%ARG_TARGET%"=="container" goto :ct_finish
 call :manifest_complete ok
 
 :: Stop the distro so the next interactive launch starts fresh and applies
@@ -624,6 +692,132 @@ echo           Name   : %ARG_WSL_NAME%
 echo           Start  : wsl -d %ARG_WSL_NAME%
 if "%C2W_MANIFEST%"=="1" echo           Record : cat /etc/container2wsl/manifest.jsonl  (copy: %INSTALL_PATH%\container2wsl-manifest.jsonl)
 echo.
+exit /b 0
+
+
+:: ============================================================
+::  CONTAINER TARGET (--target container): a running docker/podman container instead of a
+::  WSL distro. Straps, rendering and the manifest are shared with the WSL target; host
+::  folders straps read are bind-mounted at their /mnt/<drive>/... path, so the *_LX
+::  variables mean the same thing in both targets.
+:: ============================================================
+
+:ct_setup
+:: Engine name for the straps, command prefixes, and the list of host folders to mount.
+set "C2W_ENGINE=docker"
+for /f "usebackq delims=" %%v in (`%DOCKER_CMD% --version 2^>nul`) do echo %%v | findstr /i podman >nul && set "C2W_ENGINE=podman"
+set "T_ROOT=%DOCKER_CMD% exec -u root %ARG_WSL_NAME%"
+set "T_USER=%DOCKER_CMD% exec -u %ARG_WSL_USER% %ARG_WSL_NAME%"
+set "CT_MOUNT_LIST="
+call :ct_add_mount "%C2W_SCRIPT_DIR%"
+if exist "%C2W_SCRIPT_DIR%..\devtools\" call :ct_add_mount "%C2W_SCRIPT_DIR%..\devtools"
+if defined C2W_PRIVATE_DIRS for %%d in ("!C2W_PRIVATE_DIRS:;=" "!") do call :ct_add_mount "%%~d"
+if defined C2W_SSH_SOURCE if exist "%C2W_SSH_SOURCE%\" call :ct_add_mount "%C2W_SSH_SOURCE%"
+goto :eof
+
+:ct_add_mount
+:: %~1 = Windows folder. Appends "C:\x:/mnt/c/x" (quoted) to CT_MOUNT_LIST, no duplicates.
+set "_CM=%~f1"
+if "!_CM:~-1!"=="\" set "_CM=!_CM:~0,-1!"
+call :win2lx "!_CM!" _CM_LX
+if defined CT_MOUNT_LIST if not "!CT_MOUNT_LIST:%_CM%:=!"=="!CT_MOUNT_LIST!" goto :eof
+set "CT_MOUNT_LIST=!CT_MOUNT_LIST! "!_CM!:!_CM_LX!""
+goto :eof
+
+:ct_flow
+:: Steps 2-3 for the container target, then back to the shared strap steps.
+set "INSTALL_PATH=%ARG_WSL_LOCATION%\%ARG_WSL_NAME%"
+if not exist "%INSTALL_PATH%\" mkdir "%INSTALL_PATH%" 2>nul
+:: the per-run folder holds the rendered scripts and the manifest: mount it too
+call :ct_add_mount "%C2W_TMP%"
+set "CT_MOUNTS="
+for %%m in (!CT_MOUNT_LIST!) do set "CT_MOUNTS=!CT_MOUNTS! -v "%%~m""
+echo [2/%STEP_COUNT%] Starting container '%ARG_WSL_NAME%' from %ARG_IMAGE%...
+call %DOCKER_CMD% container inspect %ARG_WSL_NAME% >nul 2>&1
+if not errorlevel 1 (
+    if %FORCE%==0 (
+        echo [ERROR] Container '%ARG_WSL_NAME%' already exists. Use --force to replace it.
+        call :manifest_cleanup_tmp
+        exit /b 1
+    )
+    echo       Removing existing container '%ARG_WSL_NAME%'...
+    call %DOCKER_CMD% rm -f %ARG_WSL_NAME% >nul 2>&1
+)
+echo       %DOCKER_CMD% run -d --name %ARG_WSL_NAME% --hostname %ARG_WSL_NAME% --entrypoint sleep!CT_MOUNTS! "%ARG_IMAGE%" infinity
+call %DOCKER_CMD% run -d --name %ARG_WSL_NAME% --hostname %ARG_WSL_NAME% --entrypoint sleep!CT_MOUNTS! "%ARG_IMAGE%" infinity >nul
+if errorlevel 1 (
+    echo [ERROR] %DOCKER_CMD% run failed for %ARG_IMAGE%. The image needs a sleep command ^(coreutils or busybox^).
+    call :manifest_cleanup_tmp
+    exit /b 1
+)
+echo       Started. Mounted: !CT_MOUNT_LIST!
+echo [3/%STEP_COUNT%] Creating user '%ARG_WSL_USER%'...
+call %T_ROOT% useradd -m -s /bin/bash "%ARG_WSL_USER%" >nul 2>&1
+call %T_ROOT% usermod -aG sudo "%ARG_WSL_USER%" >nul 2>&1
+call %T_ROOT% id "%ARG_WSL_USER%" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Could not create user '%ARG_WSL_USER%' in the container ^(useradd missing?^).
+    call :manifest_cleanup_tmp
+    exit /b 1
+)
+echo       User '%ARG_WSL_USER%' ready.
+call :ct_ssh_check
+if errorlevel 1 (
+    call :manifest_cleanup_tmp
+    exit /b 1
+)
+:: inside the container the ssh source is its mount, not a Windows path (no wslpath there)
+if defined C2W_SSH_SOURCE call :win2lx "%C2W_SSH_SOURCE%" C2W_SSH_SOURCE
+goto :after_target_setup
+
+:ct_ssh_check
+:: ssh-keys checks Windows ACLs with powershell.exe, which a container cannot start. When
+:: ssh-keys is requested, run the same check here on the host and tell the strap it was done.
+if /i "%C2W_SSH_ACL_CHECK%"=="off" exit /b 0
+set "_SK=0"
+if %ARG_POSTSTRAP_N% geq 1 for /l %%i in (1,1,%ARG_POSTSTRAP_N%) do if /i "!ARG_POSTSTRAP_REQ_%%i!"=="ssh-keys" set "_SK=1"
+if "%_SK%"=="0" exit /b 0
+set "_SK_DIRS="
+if defined C2W_SSH_SOURCE (set "_SK_DIRS="%C2W_SSH_SOURCE%"") else if defined C2W_PRIVATE_DIRS for %%d in ("!C2W_PRIVATE_DIRS:;=" "!") do if exist "%%~d\ssh\" set "_SK_DIRS=!_SK_DIRS! "%%~d\ssh""
+for %%d in (!_SK_DIRS!) do (
+    powershell -noprofile -executionpolicy bypass -file "%C2W_SCRIPT_DIR%lib\ssh-source-check.ps1" -Path "%%~d"
+    if errorlevel 1 (
+        echo [ERROR] ssh-keys: %%~d failed the Windows ACL check above. Refusing.
+        exit /b 1
+    )
+)
+set "C2W_SSH_ACL_CHECK=host"
+exit /b 0
+
+:ct_finish
+:: After the straps: optional commit, then leave the container running.
+set "_CT_SHELL=/bin/bash"
+for /f "tokens=7 delims=:" %%s in ('%T_ROOT% getent passwd %ARG_WSL_USER% 2^>nul') do set "_CT_SHELL=%%s"
+if defined ARG_COMMIT (
+    echo [!_NEXT_STEP!/%STEP_COUNT%] Committing container to image %ARG_COMMIT%...
+    echo       %DOCKER_CMD% commit --change "ENTRYPOINT []" --change "CMD !_CT_SHELL! -l" --change "USER %ARG_WSL_USER%" --change "WORKDIR /home/%ARG_WSL_USER%" %ARG_WSL_NAME% "%ARG_COMMIT%"
+    call %DOCKER_CMD% commit --change "ENTRYPOINT []" --change "CMD !_CT_SHELL! -l" --change "USER %ARG_WSL_USER%" --change "WORKDIR /home/%ARG_WSL_USER%" %ARG_WSL_NAME% "%ARG_COMMIT%" >nul
+    if errorlevel 1 (
+        echo [ERROR] %DOCKER_CMD% commit failed.
+        set "C2W_M_FAILED=commit %ARG_COMMIT%"
+        call :manifest_complete failed
+        exit /b 1
+    )
+    echo       Committed. Bind mounts are not part of the image.
+)
+call :manifest_complete ok
+echo.
+echo [SUCCESS] Container created and running.
+echo           Name   : %ARG_WSL_NAME%
+echo           Enter  : %DOCKER_CMD% exec -it -u %ARG_WSL_USER% -w /home/%ARG_WSL_USER% %ARG_WSL_NAME% !_CT_SHELL! -l
+if defined ARG_COMMIT echo           Image  : %ARG_COMMIT%  ^(%DOCKER_CMD% run -it --rm %ARG_COMMIT%^)
+echo           Remove : %DOCKER_CMD% rm -f %ARG_WSL_NAME%
+if "%C2W_MANIFEST%"=="1" echo           Record : c2w-manifest inside the container  ^(copy: %INSTALL_PATH%\container2wsl-manifest.jsonl^)
+echo.
+exit /b 0
+
+:manifest_cleanup_tmp
+if defined C2W_TMP if exist "%C2W_TMP%\" rmdir /s /q "%C2W_TMP%" >nul 2>&1
 exit /b 0
 
 
@@ -878,7 +1072,7 @@ powershell -noprofile -command ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_BS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
 call :win2lx "%_BS_SH%" _BS_SH_LX
-call %WSL_CMD% -d %~1 -u root -- bash !_BS_SH_LX! > "%_BS_TMP%" 2>&1
+call %T_ROOT% bash !_BS_SH_LX! > "%_BS_TMP%" 2>&1
 set "_BS_RC=!errorlevel!"
 set "_BS_FAIL=0"
 if !_BS_RC! neq 0 set "_BS_FAIL=1"
@@ -940,7 +1134,7 @@ powershell -noprofile -command ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_PS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
 call :win2lx "%_PS_SH%" _PS_SH_LX
-call %WSL_CMD% -d %~1 -u %~6 -- bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
+call %T_USER% bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
 set "_PS_RC=!errorlevel!"
 set "_PS_FAIL=0"
 if !_PS_RC! neq 0 set "_PS_FAIL=1"
@@ -978,7 +1172,7 @@ if errorlevel 1 (
     exit /b 0
 )
 call :win2lx "%C2W_M_TMP%" _M_LX
-call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 644 "!_M_LX!" /etc/container2wsl/manifest.jsonl >nul 2>&1
+call %T_ROOT% install -D -m 644 "!_M_LX!" /etc/container2wsl/manifest.jsonl >nul 2>&1
 if "%~1"=="create" call :manifest_tool
 exit /b 0
 
@@ -990,8 +1184,8 @@ exit /b 0
 if not exist "%C2W_SCRIPT_DIR%lib\c2w-manifest" exit /b 0
 copy /y "%C2W_SCRIPT_DIR%lib\c2w-manifest" "%C2W_TMP%\c2w-manifest" >nul 2>&1
 call :win2lx "%C2W_TMP%\c2w-manifest" _MT_LX
-call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- install -D -m 755 "!_MT_LX!" /usr/local/bin/c2w-manifest >nul 2>&1
-call %WSL_CMD% -d %ARG_WSL_NAME% -u root -- sed -i "s/\r//" /usr/local/bin/c2w-manifest >nul 2>&1
+call %T_ROOT% install -D -m 755 "!_MT_LX!" /usr/local/bin/c2w-manifest >nul 2>&1
+call %T_ROOT% sed -i "s/\r//" /usr/local/bin/c2w-manifest >nul 2>&1
 del /f /q "%C2W_TMP%\c2w-manifest" >nul 2>&1
 exit /b 0
 
@@ -1022,7 +1216,7 @@ set "C2W_M_COUNT=%~7"
 set "C2W_M_AS=%~8"
 set "C2W_M_RESULT=%~9"
 set "C2W_M_COPY=/etc/container2wsl/straps/!_MS_SEQ!-%~2-%~nx4.sh"
-call %WSL_CMD% -d %~1 -u root -- install -D -m 600 "%~6" "!C2W_M_COPY!" >nul 2>&1
+call %T_ROOT% install -D -m 600 "%~6" "!C2W_M_COPY!" >nul 2>&1
 call :manifest strap
 exit /b 0
 

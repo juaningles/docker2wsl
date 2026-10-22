@@ -11,6 +11,7 @@
     C2W_M_ACTION   create | strap | complete
     common         INSTALL_PATH ARG_IMAGE ARG_WSL_NAME ARG_WSL_USER ARG_WSL_LOCATION
                    VERSION C2W_ARGV C2W_CWD C2W_SCRIPT_DIR DOCKER_CMD WSL_CMD FORCE
+                   C2W_TARGET (wsl|container) C2W_ENGINE ARG_COMMIT
     create         C2W_IMAGE_PULLED C2W_BUILD_START ARG_{BOOT,POST}STRAP_N/_i/_REQ_i
     strap          C2W_M_KIND C2W_M_INDEX C2W_M_SEQ C2W_M_REQ C2W_M_PATH C2W_M_SH
                    C2W_M_COPY C2W_M_COUNT C2W_M_RESULT C2W_M_AS C2W_STRAP_START
@@ -65,12 +66,13 @@ switch ($action) {
     $docker = Ev 'DOCKER_CMD'; $wsl = Ev 'WSL_CMD'; $name = Ev 'ARG_WSL_NAME'; $ref = Ev 'ARG_IMAGE'
     $img = Quiet { $j = (RunCmd "$docker image inspect `"$ref`"") -join "`n"; if ($j) { @(ConvertFrom-Json $j)[0] } }
     $osrel = Quiet {
-      $lines = RunCmd "$wsl -d $name -u root -- cat /etc/os-release"
+      $target = Ev 'C2W_TARGET'
+      $lines = if ($target -eq 'container') { RunCmd "$docker exec $name cat /etc/os-release" } else { RunCmd "$wsl -d $name -u root -- cat /etc/os-release" }
       $p = @($lines | Where-Object { $_ -match '^PRETTY_NAME=' }) | Select-Object -First 1
       if ($p) { ($p -replace '^PRETTY_NAME=', '').Trim('"') }
     }
     $env:WSL_UTF8 = '1'
-    $wslver = Quiet { $v = @(RunCmd "$wsl --version") | Where-Object { $_ -match '\d+\.\d+' } | Select-Object -First 1; if ($v -and $v -notmatch 'MOCK') { "$v".Trim() } }
+    $wslver = if ((Ev 'C2W_TARGET') -eq 'container') { $null } else { Quiet { $v = @(RunCmd "$wsl --version") | Where-Object { $_ -match '\d+\.\d+' } | Select-Object -First 1; if ($v -and $v -notmatch 'MOCK') { "$v".Trim() } } }
     $engine = Quiet { $v = @(RunCmd "$docker --version") | Select-Object -First 1; if ($v -and $v -notmatch 'MOCK') { "$v".Trim() } }
 
     $rec = [ordered]@{
@@ -93,6 +95,7 @@ switch ($action) {
       distro  = [ordered]@{
         name = $name; user = (Ev 'ARG_WSL_USER'); install_path = $install
         os = $osrel; replaced_existing = ((Ev 'FORCE') -eq '1')
+        target = $(if (Ev 'C2W_TARGET') { Ev 'C2W_TARGET' } else { 'wsl' }); engine = (Ev 'C2W_ENGINE'); commit = (Ev 'ARG_COMMIT')
       }
       straps  = [ordered]@{ bootstrap = (StrapList 'BOOTSTRAP'); poststrap = (StrapList 'POSTSTRAP') }
       private = @(foreach ($d in @((Ev 'C2W_PRIVATE_DIRS') -split ';' | Where-Object { $_ })) { [ordered]@{ path = $d; git = (GitInfo $d) } })

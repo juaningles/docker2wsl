@@ -114,7 +114,8 @@ function dflt(a, b) { return a != "" ? a : b }
     nd = cnt("image.digests"); for (i = 0; i < nd; i++) dig[i] = v("image.digests[" i "]")
     tver = v("tool.version"); tgit = v("tool.git.commit"); tdirty = v("tool.git.dirty")
     hcomp = v("host.computer"); huser = v("host.windows_user"); hwin = v("host.windows")
-    hwsl = v("host.wsl"); heng = v("host.engine")
+    hwsl = v("host.wsl"); heng = v("host.engine"); hos = v("host.os"); tname = dflt(v("tool.name"), "container2wsl")
+    dtarget = v("distro.target"); deng = v("distro.engine"); dcommit = v("distro.commit")
     nb = cnt("straps.bootstrap"); np = cnt("straps.poststrap")
     npv = cnt("private"); for (i = 0; i < npv; i++) { pv[i] = v("private[" i "].path"); pvg[i] = v("private[" i "].git.commit") (v("private[" i "].git.dirty") == "true" ? "*" : "") }
     for (i = 0; i < nb; i++) reqb[i] = base(v("straps.bootstrap[" i "].requested"))
@@ -145,7 +146,8 @@ END {
     exit 0
   }
 
-  printf "Distro    %s  (user %s)%s\n", name, user, (dos != "" ? "  " dos : "")
+  printf "%-9s %s  (user %s)%s\n", (dtarget == "container" ? "Container" : "Distro"), name, user, (dos != "" ? "  " dos : "")
+  if (dtarget == "container") printf "Engine    %s%s\n", deng, (dcommit != "" ? "  committed to " dcommit : "")
   printf "Built     %s  %s%s\n", when(ctime), status, (replaced == "true" ? "  (replaced an existing distro)" : "")
   printf "Stored    %s\n", dflt(ipath, "?")
   printf "Command   %s\n", cmd
@@ -155,8 +157,8 @@ END {
   for (i = 0; i < nd; i++) printf "  digest  %s\n", dig[i]
   if (ios != "" || icreated != "") printf "  info    %s/%s  created %s  %s\n", dflt(ios, "?"), dflt(iarch, "?"), when(icreated), human(isize)
   for (i = 0; i < npv; i++) printf "%-9s %s%s\n", (i == 0 ? "Private" : ""), pv[i], (pvg[i] != "" ? "  (git " pvg[i] ")" : "")
-  printf "Tool      container2wsl %s%s\n", tver, (tgit != "" ? "  (git " tgit (tdirty == "true" ? ", uncommitted changes" : "") ")" : "")
-  printf "Host      %s (%s)  Windows %s%s%s\n", hcomp, huser, hwin, (hwsl != "" ? "  " hwsl : ""), (heng != "" ? "  " heng : "")
+  printf "Tool      %s %s%s\n", tname, tver, (tgit != "" ? "  (git " tgit (tdirty == "true" ? ", uncommitted changes" : "") ")" : "")
+  printf "Host      %s (%s)  %s%s%s\n", hcomp, huser, (hwin != "" ? "Windows " hwin : hos), (hwsl != "" ? "  " hwsl : ""), (heng != "" ? "  " heng : "")
   if (ns == 0 && nb + np == 0) { print "Straps    none"; exit 0 }
   printf "Straps    %d requested, %d ran: %d ok, %d failed\n", nb + np, ns, nok, nfail
   printf "  %-2s %-9s %-18s %-6s %7s %-8s %-12s %s\n", "#", "kind", "name", "result", "time", "as", "sha256", "git"

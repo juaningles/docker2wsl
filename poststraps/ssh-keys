@@ -1,6 +1,6 @@
 # Copy ssh keys, config and known_hosts into ~/.ssh with the right modes, from the ssh/ folder of
 # each private overlay (C2W_PRIVATE_DIRS) in order, or from C2W_SSH_SOURCE (a Windows or Linux
-# folder, e.g. %%USERPROFILE%%\.ssh) when set. Nothing is copied by default from anywhere else.
+# folder, e.g. %USERPROFILE%\.ssh) when set. Nothing is copied by default from anywhere else.
 #
 # Source folders are checked first, mirroring ssh's own rules, and the strap REFUSES to copy if:
 #   - a Windows source (under /mnt) grants access to anyone but the owner, SYSTEM and Administrators
@@ -36,7 +36,7 @@ if [ -n "$SRC" ]; then
 else
     IFS=:; for D in $DIRS; do [ -d "$D/ssh" ] && SOURCES="$SOURCES${SOURCES:+:}$D/ssh"; done; unset IFS
 fi
-if [ -z "$SOURCES" ]; then echo "[ERROR] ssh-keys: no source. Put keys in the ssh/ folder of a private overlay, or set C2W_SSH_SOURCE (e.g. %%USERPROFILE%%\\.ssh)."; exit 1; fi
+if [ -z "$SOURCES" ]; then echo "[ERROR] ssh-keys: no source. Put keys in the ssh/ folder of a private overlay, or set C2W_SSH_SOURCE (e.g. %USERPROFILE%\\.ssh)."; exit 1; fi
 # drop sources that hold nothing to install (only a README, or empty); warn, do not fail
 KEEP=
 IFS=:; for S in $SOURCES; do
@@ -53,6 +53,7 @@ IFS=:; for S in $SOURCES; do
     case "$S" in
     /mnt/*)
         if [ "$ACL" = off ]; then echo "[WARN] ssh-keys: Windows ACL check skipped for $S (C2W_SSH_ACL_CHECK=off)"
+        elif [ "$ACL" = host ]; then echo "ssh-keys: Windows ACLs of $S were checked on the host by the runner"
         else
             [ -n "$PS" ] && [ -n "$CHECK" ] || { echo "[ERROR] ssh-keys: cannot verify Windows ACLs (powershell.exe not reachable or lib/ssh-source-check.ps1 missing). Refusing. Set C2W_SSH_ACL_CHECK=off to override."; exit 1; }
             # interop can be down although powershell.exe exists ("Exec format error"): the WSLInterop

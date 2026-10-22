@@ -10,6 +10,9 @@
 # Bind mounts resolve inside the machine: /mnt/c/... paths work, paths under this distro's
 # /home do not exist there.
 # Also runnable on an existing distro: bash poststraps/podman-machine
+TARGET="%C2W_TARGET%"
+case "$TARGET" in *C2W_TARGET*) TARGET="${C2W_TARGET:-wsl}" ;; esac
+if [ "$TARGET" = container ]; then echo "podman-machine: not applicable in a container (the Windows podman machine is for WSL distros); skipped"; exit 0; fi
 CONN="%C2W_PODMAN_CONNECTION%"
 case "$CONN" in *C2W_PODMAN_CONNECTION*) CONN="$C2W_PODMAN_CONNECTION" ;; esac
 PW=$(command -v podman.exe || ls "/mnt/c/Program Files/RedHat/Podman/podman.exe" 2>/dev/null || true)
