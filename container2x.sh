@@ -161,7 +161,7 @@ e_run_cmd() {   # prints nothing; fills RUN_CMD with the full run command
   local m; for m in "${MOUNTS[@]}"; do RUN_CMD+=(-v "$m:$m"); done
   RUN_CMD+=("$IMAGE" infinity)
 }
-e_exec() { local u="$1"; shift; "$E" exec -u "$u" "$NAME" "$@"; }
+e_exec() { local u="$1"; shift; "$E" exec -u "$u" "$NAME" "$@" < /dev/null; }   # no stdin: a prompt fails, never hangs
 e_commit() {   # $1 = login shell of the user
   if [ "$ENGINE" != apple ]; then
     "$E" commit --change 'ENTRYPOINT []' --change "CMD $1 -l" --change "USER $USER_NAME" \
@@ -234,9 +234,10 @@ for d in ${PRIV[@]+"${PRIV[@]}"}; do add_mount "$d"; done
 
 # ---------------------------------------------------------------- rendering (docs/RUNNERS.md)
 # Drop blank and #-comment lines, trim trailing blanks, expand %NAME% only for a defined NAME
-# (anything else, %% included, stays as it is), prepend set -e. Same as container2wsl.bat.
+# (anything else, %% included, stays as it is), prepend set -e and DEBIAN_FRONTEND=noninteractive.
+# Same as container2wsl.bat.
 render() {
-  { printf 'set -e\n'
+  { printf 'set -e\nexport DEBIAN_FRONTEND=noninteractive\n'
     tr -d '\r' < "$1" | awk '
       { sub(/[ \t]+$/, "") }
       $0 == "" || /^#/ { next }
@@ -340,8 +341,8 @@ STEPS=3; [ ${#BOOT[@]} -gt 0 ] && STEPS=$((STEPS+1)); [ ${#POST[@]} -gt 0 ] && S
 if [ "$DRY" = 1 ]; then
   d=$(mktemp -d); MOUNTS+=("<run folder>")
   e_run_cmd; say "[DRY-RUN] ${RUN_CMD[*]}"
-  for f in ${BOOT[@]+"${BOOT[@]}"}; do strap_dir_vars "$f"; render "$f" "$d/s.sh"; say "[DRY-RUN] Bootstrap commands from: $f (as root)"; sed -n '2,$s/^/  /p' "$d/s.sh"; done
-  for f in ${POST[@]+"${POST[@]}"}; do strap_dir_vars "$f"; render "$f" "$d/s.sh"; say "[DRY-RUN] Poststrap commands from: $f (as $USER_NAME)"; sed -n '2,$s/^/  /p' "$d/s.sh"; done
+  for f in ${BOOT[@]+"${BOOT[@]}"}; do strap_dir_vars "$f"; render "$f" "$d/s.sh"; say "[DRY-RUN] Bootstrap commands from: $f (as root)"; sed -n '3,$s/^/  /p' "$d/s.sh"; done
+  for f in ${POST[@]+"${POST[@]}"}; do strap_dir_vars "$f"; render "$f" "$d/s.sh"; say "[DRY-RUN] Poststrap commands from: $f (as $USER_NAME)"; sed -n '3,$s/^/  /p' "$d/s.sh"; done
   rm -rf "$d"; say "[DRY-RUN] All steps skipped."; exit 0
 fi
 
@@ -393,7 +394,7 @@ run_straps() {   # $1 = boot|post
     i=$((i+1)); SEQ=$((SEQ+1)); n=$(printf '%02d' "$SEQ")
     say "[$step/$STEPS] Running $kind ${i}/${#list[@]}: $f (as $as)"
     strap_dir_vars "$f"; out="$RUN_DIR/$n-$kind-$(basename "$f").sh"; render "$f" "$out"
-    cnt=$(($(wc -l < "$out") - 1))
+    cnt=$(($(wc -l < "$out") - 2))   # minus the set -e / DEBIAN_FRONTEND header
     t0=$(epoch); rc=0
     e_exec "$as" bash "$out" || rc=$?
     copy="/etc/container2wsl/straps/$n-$kind-$(basename "$f").sh"

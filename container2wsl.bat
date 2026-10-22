@@ -1187,7 +1187,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
 set "_BS_SH=%C2W_TMP%\c2w_bootstrap_cmd.sh"
 powershell -noprofile -command ^
   "[IO.File]::WriteAllText('%C2W_STRAP_START%', [DateTime]::UtcNow.ToString('o')); " ^
-  "$lines = @('set -e'); " ^
+  "$lines = @('set -e', 'export DEBIAN_FRONTEND=noninteractive'); " ^
   "Get-Content -LiteralPath '%~2' -Encoding UTF8 | ForEach-Object { " ^
   "  $l = $_.TrimEnd(); " ^
   "  if ($l -and -not $l.StartsWith('#')) { " ^
@@ -1196,7 +1196,9 @@ powershell -noprofile -command ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_BS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
 call :win2lx "%_BS_SH%" _BS_SH_LX
-call %T_ROOT% bash !_BS_SH_LX! > "%_BS_TMP%" 2>&1
+:: stdin from nul: WSL would hand the strap this console, and a prompt (apt's tzdata asks for a
+:: timezone) would wait unseen because the output goes to a file until the strap ends
+call %T_ROOT% bash !_BS_SH_LX! < nul > "%_BS_TMP%" 2>&1
 set "_BS_RC=!errorlevel!"
 set "_BS_FAIL=0"
 if !_BS_RC! neq 0 set "_BS_FAIL=1"
@@ -1249,7 +1251,7 @@ for /f "usebackq delims=" %%L in ("%~2") do (
 set "_PS_SH=%C2W_TMP%\c2w_poststrap_cmd.sh"
 powershell -noprofile -command ^
   "[IO.File]::WriteAllText('%C2W_STRAP_START%', [DateTime]::UtcNow.ToString('o')); " ^
-  "$lines = @('set -e'); " ^
+  "$lines = @('set -e', 'export DEBIAN_FRONTEND=noninteractive'); " ^
   "Get-Content -LiteralPath '%~2' -Encoding UTF8 | ForEach-Object { " ^
   "  $l = $_.TrimEnd(); " ^
   "  if ($l -and -not $l.StartsWith('#')) { " ^
@@ -1258,7 +1260,7 @@ powershell -noprofile -command ^
   "}; " ^
   "[IO.File]::WriteAllBytes('%_PS_SH%', [Text.Encoding]::UTF8.GetBytes(($lines -join [char]10) + [char]10))" 2>nul
 call :win2lx "%_PS_SH%" _PS_SH_LX
-call %T_USER% bash !_PS_SH_LX! > "%_PS_TMP%" 2>&1
+call %T_USER% bash !_PS_SH_LX! < nul > "%_PS_TMP%" 2>&1
 set "_PS_RC=!errorlevel!"
 set "_PS_FAIL=0"
 if !_PS_RC! neq 0 set "_PS_FAIL=1"

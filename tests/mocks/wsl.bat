@@ -49,6 +49,8 @@ exit /b 0
 
 :do_run
 :: wsl -d <name> [-u <user>] -- bash -c <cmd>
+:: With C2W_MOCK_SCRIPTS set, "-d N -u U -- bash /mnt/<d>/path" copies that script there.
+if defined C2W_MOCK_SCRIPTS if "%~6"=="bash" call :keep_script "%~7"
 if %C2W_MOCK_WSL_BASH_FAIL% equ 1 (
     echo [MOCK wsl] bash command failed
     exit /b 1
@@ -69,4 +71,13 @@ if defined C2W_MOCK_WSL_DISTRO_EXISTS (
 )
 :do_list_empty
 echo [MOCK wsl] --list
+exit /b 0
+
+:keep_script
+:: %~1 = /mnt/<drive>/path of the rendered script; copy it as <C2W_MOCK_SCRIPTS>\last-<name>
+set "_KS=%~1"
+set "_KS=!_KS:/mnt/=!"
+set "_KS=!_KS:~0,1!:!_KS:~1!"
+set "_KS=!_KS:/=\!"
+copy /y "!_KS!" "%C2W_MOCK_SCRIPTS%\last-%~nx1" >nul 2>&1
 exit /b 0

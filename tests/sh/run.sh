@@ -73,6 +73,7 @@ for eng in docker podman; do
   has "$C2X_MOCK_LOG" "$eng exec -u root b-$eng bash" "$eng: bootstrap runs as root"
   has "$C2X_MOCK_LOG" "$eng exec -u tester b-$eng bash" "$eng: poststrap runs as the user"
   if [ "$(head -1 "$TMP"/scripts/01-bootstrap-boot.txt.sh 2>/dev/null)" = "set -e" ]; then ok "$eng: rendered script starts with set -e"; else bad "$eng: rendered script starts with set -e"; fi
+  if [ "$(sed -n 2p "$TMP"/scripts/01-bootstrap-boot.txt.sh 2>/dev/null)" = "export DEBIAN_FRONTEND=noninteractive" ]; then ok "$eng: rendered script exports DEBIAN_FRONTEND"; else bad "$eng: rendered script exports DEBIAN_FRONTEND"; fi
   hasnt "$C2X_MOCK_LOG" "$eng commit" "$eng: no commit without --commit"
   M="$TMP/records/b-$eng/container2wsl-manifest.jsonl"
   if [ -f "$M" ]; then ok "$eng: manifest written"; else bad "$eng: manifest written" "$M"; fi
@@ -139,6 +140,11 @@ rcn $? "ssh mode: non-zero exit for a 755 ssh folder"; has "$OUT" "needs 700" "s
 chmod 700 "$PRIV/ssh"
 c2x ubuntu:24.04 --engine docker -n s2 --private "$PRIV" -p ssh-keys
 rc0 $? "ssh mode: 700 folder accepted"
+
+t "straps get no stdin"
+if grep -q 'exec -u "$u" "$NAME" "$@" < /dev/null' "$C2X"; then ok "exec: stdin from /dev/null"; else bad "exec: stdin from /dev/null"; fi
+c2x ubuntu:24.04 --engine docker -n ni1 -b "$BS" --dry-run
+hasnt "$OUT" "export DEBIAN_FRONTEND" "dry run lists the strap's own lines, not the header"
 
 t "WSL-only straps skip themselves"
 reset

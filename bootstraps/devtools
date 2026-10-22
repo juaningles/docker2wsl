@@ -1,3 +1,5 @@
+# noninteractive: tzdata (pulled in by build-essential) would otherwise ask for a timezone
+export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y \
   make vim \

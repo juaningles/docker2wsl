@@ -436,6 +436,32 @@ call "%HELPERS%" assert_output_contains "%OUT%" "config not validated" "straps-d
 call "%HELPERS%" assert_output_contains "%OUT%" "--version 2>&1 | head -1" "straps-dryrun: last keychain command listed"
 rmdir /s /q "%_CWD%" >nul 2>&1
 
+:: ============================================================
+::  Straps never wait for input: DEBIAN_FRONTEND and empty stdin
+:: ============================================================
+echo    %C2W_ESC%[33mtest:%C2W_ESC%[0m rendered straps are noninteractive
+call :reset_mocks 2>nul
+copy /y "%MOCKS_DIR%\wsl.bat" "%C2W_TMPDIR%\wsl.bat" >nul 2>&1
+set "C2W_MOCK_SCRIPTS=%C2W_TMPDIR%\kept"
+if exist "%C2W_MOCK_SCRIPTS%" rmdir /s /q "%C2W_MOCK_SCRIPTS%"
+mkdir "%C2W_MOCK_SCRIPTS%"
+set "_NI=%C2W_TMPDIR%\ni_strap.txt"
+(echo read -r answer) > "%_NI%"
+call "%SCRIPT%" ubuntu:latest --name %C2W_TEST_ID%-noni -b "%_NI%" -p "%_NI%" > "%OUT%" 2>&1
+set "_RC=%errorlevel%"
+call "%HELPERS%" assert_exit_zero "%_RC%" "noninteractive: exit 0"
+call "%HELPERS%" assert_file_exists "%C2W_MOCK_SCRIPTS%\last-c2w_bootstrap_cmd.sh" "noninteractive: bootstrap script kept by the mock"
+call "%HELPERS%" assert_output_contains "%C2W_MOCK_SCRIPTS%\last-c2w_bootstrap_cmd.sh" "export DEBIAN_FRONTEND=noninteractive" "noninteractive: bootstrap exports DEBIAN_FRONTEND"
+call "%HELPERS%" assert_output_contains "%C2W_MOCK_SCRIPTS%\last-c2w_poststrap_cmd.sh" "export DEBIAN_FRONTEND=noninteractive" "noninteractive: poststrap exports DEBIAN_FRONTEND"
+findstr /n /c:"set -e" "%C2W_MOCK_SCRIPTS%\last-c2w_bootstrap_cmd.sh" > "%C2W_TMPDIR%\ni_first.txt" 2>nul
+call "%HELPERS%" assert_output_contains "%C2W_TMPDIR%\ni_first.txt" "1:set -e" "noninteractive: set -e is still the first line"
+:: count the strap runs with "< nul > " in the script (the search text avoids "!", which this
+:: file's delayed expansion would eat)
+set "_NIC=0"
+for /f %%n in ('findstr /c:"< nul > " "%SCRIPT%" ^| find /c /v ""') do set "_NIC=%%n"
+call "%HELPERS%" assert_equal "%_NIC%" "2" "noninteractive: bootstraps and poststraps get stdin from nul"
+set "C2W_MOCK_SCRIPTS="
+
 endlocal & set "C2W_PASS=%C2W_PASS%"& set "C2W_FAIL=%C2W_FAIL%"
 goto :eof
 
