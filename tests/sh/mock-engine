@@ -7,7 +7,7 @@
 #   C2X_MOCK_RUN_FAIL=1       run fails
 #   C2X_MOCK_STRAP_FAIL=1     exec "bash <script>" fails (a strap fails)
 #   C2X_MOCK_COMMIT_FAIL=1    commit fails
-#   C2X_MOCK_BUILD_FAIL=1     build fails (Apple commit fallback)
+#   C2X_MOCK_BUILD_FAIL=1     build fails (the Apple commit step builds FROM scratch)
 #   C2X_MOCK_SCRIPTS=DIR      copy every script run through exec into DIR
 #   C2X_MOCK_SHELL=/bin/x     login shell reported by "getent passwd" (default /usr/bin/zsh)
 me=$(basename "$0")
@@ -26,7 +26,9 @@ case "$1" in
   rm|delete) exit 0 ;;
   run) [ "${C2X_MOCK_RUN_FAIL:-0}" = 1 ] && { echo "mock run failed" >&2; exit 1; }; echo mock-id-123; exit 0 ;;
   commit) [ "${C2X_MOCK_COMMIT_FAIL:-0}" = 1 ] && { echo "mock commit failed" >&2; exit 1; }; exit 0 ;;
-  build) [ "${C2X_MOCK_BUILD_FAIL:-0}" = 1 ] && exit 1; exit 0 ;;
+  build) [ "${C2X_MOCK_BUILD_FAIL:-0}" = 1 ] && { echo "mock build failed" >&2; exit 1; }; exit 0 ;;
+  stop|start) exit 0 ;;
+  export) [ "$2" = -o ] && : > "$3"; exit 0 ;;   # apple: export -o FILE NAME
   exec)
     shift; [ "$1" = -u ] && shift 2; shift   # drop -u USER and the container name
     case "$1" in

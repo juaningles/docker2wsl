@@ -168,17 +168,20 @@ e_commit() {   # $1 = login shell of the user
       --change "WORKDIR /home/$USER_NAME" "$NAME" "$COMMIT" >/dev/null
     return
   fi
-  # Apple's commit takes no --change: commit, then a three-line build sets entrypoint, user, workdir
-  local tmp="localhost/c2x-commit:$NAME-$$" d
-  "$E" commit "$NAME" "$tmp" >/dev/null
-  d=$(mktemp -d)
-  printf 'FROM %s\nENTRYPOINT []\nCMD ["%s", "-l"]\nUSER %s\nWORKDIR /home/%s\n' "$tmp" "$1" "$USER_NAME" "$USER_NAME" > "$d/Dockerfile"
-  if "$E" build -t "$COMMIT" -f "$d/Dockerfile" "$d" >/dev/null 2>&1; then
-    "$E" image delete --force "$tmp" >/dev/null 2>&1 || true
-  else
-    "$E" image tag "$tmp" "$COMMIT" >/dev/null 2>&1 || "$E" commit "$NAME" "$COMMIT" >/dev/null
-    "$E" image delete --force "$tmp" >/dev/null 2>&1 || true
-    warn "container build could not reset the entrypoint: $COMMIT still starts 'sleep infinity'. Run it detached and exec in."
+  # Apple's container CLI (1.1.0) has no commit, and export needs a stopped container: stop it,
+  # export the filesystem, start it again, then build FROM scratch with that tar. Every step is
+  # checked; a failure returns non-zero (and the container is started again).
+  local d; d=$(mktemp -d "$RUN_ROOT/commit.XXXXXX") || return 1
+  "$E" stop "$NAME" >/dev/null 2>&1 || { rm -rf "$d"; echo "[ERROR] container stop $NAME failed" >&2; return 1; }
+  if ! "$E" export -o "$d/rootfs.tar" "$NAME" >"$d/export.log" 2>&1; then
+    "$E" start "$NAME" >/dev/null 2>&1; tail -3 "$d/export.log" >&2; rm -rf "$d"; return 1
+  fi
+  "$E" start "$NAME" >/dev/null 2>&1 || warn "could not start $NAME again after the export (container start $NAME)"
+  # FROM scratch keeps no image config: restore the standard PATH, reset the sleep entrypoint
+  printf 'FROM scratch\nADD rootfs.tar /\nENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nENTRYPOINT []\nCMD ["%s", "-l"]\nUSER %s\nWORKDIR /home/%s\n' \
+    "$1" "$USER_NAME" "$USER_NAME" > "$d/Dockerfile"
+  if ! "$E" build -t "$COMMIT" -f "$d/Dockerfile" "$d" >"$d/build.log" 2>&1; then
+    tail -5 "$d/build.log" >&2; rm -rf "$d"; return 1
   fi
   rm -rf "$d"
 }
@@ -345,7 +348,10 @@ fi
 # ---------------------------------------------------------------- build
 RUN_ROOT="${C2X_RUN_ROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/container2x}"
 mkdir -p "$RUN_ROOT"; RUN_DIR=$(cd "$(mktemp -d "$RUN_ROOT/run.XXXXXX")" && pwd)
-trap 'rm -rf "$RUN_DIR"' EXIT
+# The container still has RUN_DIR mounted when we exit, and Docker Desktop on macOS refuses to delete
+# it then: never let that fail the build, and sweep run folders older than a day at the next start.
+trap 'rm -rf "$RUN_DIR" 2>/dev/null || true' EXIT
+find "$RUN_ROOT" -maxdepth 1 -type d \( -name 'run.*' -o -name 'commit.*' \) -mmin +1440 -exec rm -rf {} + 2>/dev/null || true
 add_mount "$RUN_DIR"
 BUILD_TIME=$(now); BUILD_T0=$(epoch); PULLED=false
 

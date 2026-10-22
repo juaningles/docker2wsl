@@ -72,9 +72,9 @@ as `command.recipe`.
   The image needs a `sleep` (coreutils or busybox).
 - `--commit IMAGE:TAG` resets that: the image gets an empty entrypoint, `CMD <user's shell> -l`,
   `USER` and `WORKDIR /home/USER`. docker and podman do it with `commit --change`. Apple's
-  `container commit` has no `--change`, so container2x.sh commits to a temporary tag and runs a
-  three-line `container build`; if that build fails, the image keeps the `sleep` entrypoint and the
-  runner says so.
+  CLI (1.1.0) has no `commit`, and `export` needs a stopped container, so container2x.sh stops the
+  container, exports its filesystem, starts it again, and runs `container build` `FROM scratch` with
+  that tar (setting the standard `PATH` again, since a scratch image keeps no config).
 - Apple containers default to arm64 images; `--arch amd64` runs x86 images through Rosetta.
 - `ssh-keys`: the Windows ACL check needs `powershell.exe`, which a container cannot start, so the
   runner does it on the host and renders `C2W_SSH_ACL_CHECK=host`. Other sources get the usual

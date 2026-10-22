@@ -175,8 +175,8 @@ bash tests/sh/real.sh podman   # real builds for one engine only
 `run.sh` puts `tests/sh/mock-engine` on PATH as `docker`, `podman` and `container`; it logs every
 call. It covers arguments, rendering (expanded `%C2W_*%`, untouched undefined `%NAME%` and `%%`,
 dropped comments), overlay strap lookup, the run/exec/commit command lines per engine (Apple: `list
---all --quiet`, `--arch`, no `--hostname`, `delete --force`, commit then build, and the fallback when
-build fails), existing containers, failures, the manifest (read back with `lib/c2w-manifest`),
+--all --quiet`, `--arch`, no `--hostname`, `delete --force`, and commit as stop, export, start, build, with a build
+failure reported), existing containers, failures, the manifest (read back with `lib/c2w-manifest`),
 the ssh folder mode check, and recipes (`--recipe`, `--recipes`, overrides, last overlay wins, the
 recorded recipe, the `rebuild-container` wrapper). Run it under bash 3.2 as well, since that is what macOS ships:
 

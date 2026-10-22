@@ -97,13 +97,17 @@ has "$C2X_MOCK_LOG" "container list --all --quiet" "apple: exists check via list
 has "$C2X_MOCK_LOG" "container run -d --name a1 --arch arm64 --entrypoint sleep -v" "apple: run with --arch, no --hostname"
 hasnt "$C2X_MOCK_LOG" "--hostname" "apple: no --hostname flag"
 has "$C2X_MOCK_LOG" "container exec -u tester a1 bash" "apple: poststrap via container exec"
-has "$C2X_MOCK_LOG" "container commit a1 localhost/c2x-commit:a1-" "apple: commit to a temporary image"
-has "$C2X_MOCK_LOG" "container build -t localhost/a1:1 -f" "apple: build sets entrypoint, user, workdir"
+has "$C2X_MOCK_LOG" "container stop a1" "apple commit: stops the container (export needs it stopped)"
+has "$C2X_MOCK_LOG" "container export -o" "apple commit: exports the filesystem"
+has "$C2X_MOCK_LOG" "container start a1" "apple commit: starts the container again"
+has "$C2X_MOCK_LOG" "container build -t localhost/a1:1 -f" "apple commit: builds the image FROM scratch"
+hasnt "$C2X_MOCK_LOG" "container commit" "apple commit: no container commit (not in Apple's CLI 1.1.0)"
 has "$OUT" "Remove : container delete --force a1" "apple: remove hint uses delete --force"
 reset; export C2X_MOCK_BUILD_FAIL=1
 c2x ubuntu:24.04 --engine apple -n a2 --commit localhost/a2:1
-rc0 $? "apple build fallback: exit 0"
-has "$OUT" "still starts 'sleep infinity'" "apple build fallback: warns about the entrypoint"
+rcn $? "apple build fail: non-zero exit"
+has "$OUT" "container commit failed" "apple build fail: reported, not hidden"
+has "$C2X_MOCK_LOG" "container start a2" "apple build fail: the container was started again"
 reset; export C2X_MOCK_EXISTS=1 C2X_MOCK_NAME=a3
 c2x ubuntu:24.04 --engine apple -n a3 --force
 rc0 $? "apple force: exit 0"
