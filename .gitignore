@@ -33,3 +33,7 @@ c2wt*
 
 # scratch folder of tests/sh/real.sh (throwaway overlay, keys, run folders)
 tests/sh/.real-tmp/
+
+# Claude Code session transcripts written by a hook, and prompt-reforge working folders
+.cc-history/
+reforge-runs/
