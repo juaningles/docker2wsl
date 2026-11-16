@@ -1,7 +1,15 @@
 # Use cases and requirements
 
-Status: draft 2, 2026-11-16. Draft 2 records the operator's decisions on five open questions
-(section 9). This document states what the tool is for and what it must do. It
+Status: draft 4, 2026-11-16. Draft 2 recorded the operator's decisions on five open questions
+(section 9). Draft 3 added the developer's workbench (4.15, R74 to R76) and named the container
+engines (section 6). Draft 4 adds use cases 4.16 to 4.33 and requirements R77 to R102, covering
+collection maintenance, trust, rollback, housekeeping, architecture, shared machines, team audit,
+composition, the tool's own lifecycle and host diagnosis, and records three further decisions
+(section 9). Needs that a base image, a strap, a recipe setting or a deploy template can meet are
+not in this document; they are collected in [MODULAR_CONCEPTS.md](MODULAR_CONCEPTS.md), and only
+the prerequisites the tool must provide for them appear here (section 5.12).
+
+This document states what the tool is for and what it must do. It
 does not say how. It is the input to a redesign, so nothing here should be read as a description of
 the current scripts except the "Today" column in section 5.
 
@@ -53,6 +61,14 @@ tool, not a limitation to be lifted later.
   secret store.
 - Managing the platforms themselves (installing WSL, a container engine, a cluster, a hypervisor).
 
+### Met by parts, not by the tool
+
+Some needs are real but belong to a base image, a strap, a recipe setting or a deploy template:
+a corporate proxy and certificate, an offline mirror, an SSH server for an editor, drivers for a
+GPU. The tool's job is to run those parts well. They are described, with example uses, in
+[MODULAR_CONCEPTS.md](MODULAR_CONCEPTS.md). Where one of them needs something only the tool can
+provide, that prerequisite is a requirement here (5.12).
+
 ---
 
 ## 2. Terms
@@ -92,6 +108,7 @@ whatever platform their employer or their hardware gives them.
 - **Brings:** personal preferences (shell, prompt, aliases) and personal identity (keys, logins)
   that must not end up in anything shared.
 - **Success:** "I ran one command and I am working again, and I know what is in this environment."
+- **Use case that ties these together:** 4.15.
 
 ### 3.2 The team
 
@@ -412,6 +429,395 @@ What can go wrong:
 - A strap written for one target's kind of storage is used on another. Target tags (4.4) guard
   against this until the tool handles storage itself.
 
+### 4.15 Keep a separate environment for each kind of work
+
+**Actors:** solo developer, team. **Goal:** have the right group of tools for the work at hand,
+with nothing to look after between uses.
+
+A developer's work changes from day to day: a data pipeline this week, a web service the next, a
+one-off experiment in between. Each needs its own group of tools, and the groups should not be
+mixed into one ever-growing environment. Each group is a recipe. The developer keeps a short
+list of the environments they use, and runs the tool to (re)build whichever one the day needs.
+
+Main flow:
+1. The developer keeps a list of environments: a name, a recipe and a target for each.
+2. When a kind of work comes up, the developer runs the tool to build or rebuild that
+   environment, on the target they have on this machine (WSL, a local container engine, or a
+   cluster).
+3. The developer works in it. When the work is done, or the environment is stale or broken, they
+   discard it. Nothing of lasting value was inside it (4.14), so nothing is lost.
+4. Next time, step 2 again. The rebuilt environment has the current versions of the same tools.
+
+Variations:
+- Several environments exist side by side on one target, one per kind of work, and the
+  developer moves between them.
+- A new machine: the developer rebuilds every environment on the list in one command.
+- A throwaway: an environment built for one task and removed at the end of it, never kept.
+- The same list is used on a machine with a different target. Each environment lands on the
+  target available there (4.3).
+- The list is kept beside the developer's own straps and recipes, in a personal collection
+  (4.6), and the rebuild is run on a schedule or by another program (4.10).
+
+What can go wrong:
+- Two environments built from different recipes collide on a name or a shared resource.
+- A rebuild of one environment on the list fails and the others are left in doubt. The user needs
+  to know which succeeded, which failed and which were not attempted.
+- Removing an environment takes something that outlived it. Removal must say what it takes.
+
+### 4.16 Test a collection before publishing
+
+**Actors:** team maintainer, automated caller. **Goal:** a change to a collection is known to build
+on every target it claims before members see it.
+
+Main flow:
+1. A maintainer changes a strap or recipe and proposes it to the team's repository.
+2. A program runs the tool to build each affected recipe on each target it claims, and each
+   changed strap alone against a throwaway environment (4.4).
+3. The change is accepted only if every build succeeds. The maintainer sees which builds failed,
+   at which strap, and why.
+
+Variations:
+- Only the recipes that use a changed strap are rebuilt.
+- The same recipe is tried on more than one base.
+- A solo developer runs the same check on their personal collection on one machine.
+- The run leaves nothing behind: no environments, no saved builds, unless asked.
+
+What can go wrong:
+- A target the collection claims is not available where the check runs. That target must be
+  reported as untested, never as passed.
+- Test environments are left behind and collide with later runs.
+
+### 4.17 Maintain a collection over time
+
+**Actors:** team maintainer, solo developer. **Goal:** add, replace and retire straps and recipes
+without breaking the people and programs that use them.
+
+Main flow:
+1. An author asks the tool for a new strap or recipe. The tool creates one in the required shape,
+   with its metadata, target tags and a place for a check, so the author starts from something
+   correct rather than a copy of a neighbour.
+2. Later, the author marks a strap or recipe as superseded and names its replacement.
+3. A build that uses a superseded item still works and says so, naming the replacement.
+4. After a stated period the item is removed. A build that names it fails with the reason and
+   the replacement.
+
+Variations:
+- An item is renamed and the old name becomes an alias for a time.
+- A recipe is retired but build records that name it stay readable.
+
+What can go wrong:
+- A member's personal recipe names a retired strap, and they find out on a new laptop. The
+  warning period is what gives them time.
+- The warning is printed for a person and an automated caller never sees it. Warnings must be
+  part of the parseable result (4.10).
+
+### 4.18 Trust what runs
+
+**Actors:** all, most of all the team. **Goal:** know what a strap will do and where it came from
+before it runs with full privileges.
+
+Main flow:
+1. The user asks to see a strap: its source, its collection, the commit it came from, and what it
+   declares (tags, settings, straps it needs, whether it runs privileged).
+2. The user, or the team, names the collections they trust. The tool refuses straps from any
+   other collection unless told otherwise for one build.
+3. The tool verifies that a collection is what it claims to be, and the build record states what
+   was verified and how.
+
+Variations:
+- An automated caller is given trusted collections only and can never override.
+- A one-off exception for a build is recorded in that build's record.
+
+What can go wrong:
+- What the preview showed and what the build ran differ, because a file changed between. The
+  record must identify the exact content that ran.
+- A collection path is replaced on disk by something else with the same name.
+
+### 4.19 Go back to an earlier build
+
+**Actors:** all. **Goal:** the new environment is worse than the last; return to a known good one
+quickly.
+
+Main flow:
+1. The user names the environment and an earlier build record or saved build.
+2. The tool deploys that earlier build, replacing the current one and keeping storage that
+   outlives it (4.14).
+3. The tool states which build is now in place.
+
+Variations:
+- A saved build of the earlier version exists, so no build is needed.
+- Only a record exists. The tool builds from it (4.7). If the record was not pinned, the result
+  may differ from the original, and the user is told so beforehand.
+
+What can go wrong:
+- The earlier record names a version that can no longer be obtained.
+- The user goes back and the current build's record is lost. Both must remain.
+
+### 4.20 Inspect a failed build
+
+**Actors:** solo developer, team maintainer. **Goal:** see the state a failing strap left behind.
+
+Main flow:
+1. A build fails at a strap.
+2. The user asks that the half-built environment be kept, marked as failed.
+3. The user starts it, looks around, fixes the strap and runs the build again.
+4. The failed environment is removed by the user, or by housekeeping (4.23).
+
+Variations:
+- Keeping is the default for a person; discarding is the default for an automated caller.
+- Only the log and the record are kept, not the environment.
+
+What can go wrong:
+- The failed environment is mistaken for a working one (4.1). It must be marked, and the
+  marking must be visible wherever environments are listed.
+- The retry collides with the kept failure on the same name.
+
+### 4.21 Check whether a rebuild would change anything
+
+**Actors:** all. **Goal:** know whether an environment is stale without building it.
+
+Main flow:
+1. The user asks whether an environment is current.
+2. The tool compares the build record with the recipe as it stands now, the collections' current
+   commits, the base, and, where it can know, the versions a rebuild would install.
+3. The tool answers, for each input: unchanged, changed, or unknown.
+
+Variations:
+- The question is asked of the whole list of environments (4.15).
+- A program asks and uses the answer to decide a rebuild.
+
+What can go wrong:
+- A strap installs "the latest" by its own logic, so the version cannot be known without running
+  it. The tool must say unknown, never unchanged.
+
+### 4.22 Expire a throwaway environment
+
+**Actors:** automated caller, solo developer. **Goal:** an environment made for one task goes away
+on its own.
+
+Main flow:
+1. The environment is created with a lifetime, or tied to the caller's session.
+2. When the lifetime ends or the caller is gone, the tool removes the environment and keeps its
+   record.
+3. The removal states what was removed.
+
+Variations:
+- The lifetime is extended.
+- Storage that outlives the environment (4.14) is kept.
+
+What can go wrong:
+- The environment is removed while still in use. Extending must be easy and removal announced.
+- The tool was not running when the lifetime ended. The next run must remove it and say so.
+
+### 4.23 Clean up what builds leave behind
+
+**Actors:** all. **Goal:** reclaim space and remove leftovers with confidence.
+
+Main flow:
+1. The user asks what the tool holds on this machine: bases, download caches, temporary folders,
+   failed builds, saved builds no environment uses, instances not on the user's list. Each has a
+   size and an age.
+2. The user chooses what to remove, or gives a rule (older than, unused by anything).
+3. The tool removes it and reports the space freed.
+
+Variations:
+- A preview that removes nothing.
+- A program runs it on a schedule.
+- Only one target's leftovers.
+
+What can go wrong:
+- A base is removed while another build is using it.
+- Storage that outlives an environment is removed. The tool must never take it without asking.
+
+### 4.24 Give an instance limits and devices
+
+**Actors:** all. **Goal:** an instance gets the processor, memory, disk and hardware its work needs,
+stated once in terms that name no target.
+
+Main flow:
+1. The recipe, or the deploy request, states what the instance needs: limits, and devices such as
+   a GPU or a USB device.
+2. The tool fulfils the request in whatever way each target provides.
+3. The tool reports what was granted. A need the target cannot meet is reported before the
+   deploy, not discovered inside the environment.
+
+Variations:
+- A target meets a need only in part, for example a limit that applies to every environment on
+  the host rather than this one. The tool says so.
+- Drivers and libraries inside the environment are a strap (MODULAR_CONCEPTS.md); the tool's part
+  ends at passing the device through.
+
+What can go wrong:
+- Less is granted than asked, silently.
+
+### 4.25 Build for another processor architecture
+
+**Actors:** all. **Goal:** the same recipe on amd64 and arm64 machines, with a saved build for each.
+
+Main flow:
+1. The user names the architecture, or the tool uses the host's.
+2. Straps tagged for that architecture run; others are skipped and the user is told (4.3).
+3. The saved build is identified by its architecture along with its other inputs, and the record
+   states it.
+
+Variations:
+- A build for one architecture is run on a host of another through emulation, which is slower
+  and must be stated.
+- A cluster has nodes of both kinds and needs both saved builds.
+
+What can go wrong:
+- A saved build for the wrong architecture is deployed and fails to start.
+- A strap downloads a binary for the host's architecture rather than the environment's.
+
+### 4.26 Deploy several environments as one system
+
+**Actors:** automated caller, team. **Goal:** a group of instances that belong together, for example
+a database, a service and a worker, are deployed, named, connected and removed as one.
+
+In scope by the operator's decision (section 9, decision 6). Single deploys (4.9) and the
+parseable interface (4.10) remain the building blocks; this use case adds the grouping.
+
+Main flow:
+1. A system is described as a named group: which recipes or saved builds it is made of, how many
+   of each, and how they reach each other, in terms that name no target.
+2. The tool deploys the members on a target in the stated order, connects them, and runs each
+   member's per-instance setup (4.9).
+3. The tool reports the system: each member, how it is reached, and what it was made from.
+4. The tool removes the system as one, keeping storage that outlives it (4.14).
+
+Variations:
+- One member is replaced with one from a newer saved build while the others keep running.
+- The system is deployed on a different target and each member lands as that target provides.
+- A program asks whether a system exists, which members are running, and what each came from.
+
+What can go wrong:
+- A member fails to deploy and the others are left running. The user needs to know which
+  members exist, and removal of the partial system must be one command.
+- Two systems collide on a member's name or a shared resource.
+- A member is removed alone and the system is left inconsistent without a word.
+
+### 4.27 Run without administrator rights
+
+**Actors:** solo developer, team. **Goal:** build and deploy on a machine where the user cannot
+elevate.
+
+Main flow:
+1. Before starting, the tool says which operations on this host and target need elevation, and
+   why.
+2. Where a target has an unprivileged path, for example a rootless engine, the tool uses it.
+3. Where elevation cannot be avoided, it is asked for once, before the build, never silently in
+   the middle of one.
+
+What can go wrong:
+- An unattended run hits an elevation prompt and hangs (4.10). Unattended means no elevation,
+  or the run is refused up front.
+
+### 4.28 Share a machine among several users
+
+**Actors:** team. **Goal:** a build server or shared workstation where each user's environments,
+saved builds and collections are their own.
+
+Main flow:
+1. Each user's instances and collections are listed and removed by that user alone. A shared
+   cache of saved builds can be read by everyone.
+2. Every record states who built.
+3. Names do not collide across users.
+
+What can go wrong:
+- One user's private collection or secret can be read by another (4.11).
+- Housekeeping (4.23) run by one user removes another's things.
+
+### 4.29 Audit and remediate across the team
+
+**Actors:** team. **Goal:** answer "what is installed where" for every environment the team has,
+and act on the answer.
+
+Main flow:
+1. The records from every machine are gathered in one place. The tool emits them in a form a
+   program can collect; where they are collected is the team's choice.
+2. A maintainer asks which environments contain a given strap at a given version, were built from
+   a given collection commit, or were built by a given tool version.
+3. The maintainer asks for those environments to be rebuilt (4.2, 4.15) and sees each one's
+   outcome.
+
+Variations:
+- A tool version with a known defect built some environments.
+- An instance came from a saved build that has since been withdrawn.
+- A member has left and their environments must be found.
+
+What can go wrong:
+- Records that were never gathered are not known. The answer must state its coverage.
+- Changes made by hand are invisible (4.7).
+
+### 4.30 Reproduce a colleague's environment
+
+**Actors:** team. **Goal:** settle "it works in my environment" by building the identical thing.
+
+Main flow:
+1. A colleague shares their build record.
+2. The tool builds from it on my target, fetching the collections at the commits the record
+   names and the versions it pinned.
+3. The tool compares my record with theirs and states every difference, and every input it could
+   not compare.
+
+What can go wrong:
+- The record names a private collection I do not have.
+- Versions that were not pinned have moved on, so the two are not identical. The comparison must
+  show this rather than claim equality.
+
+### 4.31 Build centrally and let members deploy
+
+**Actors:** team, automated caller. **Goal:** pay for a build once on the team's pipeline; members
+deploy from saved builds.
+
+Main flow:
+1. On each commit to the collection, a pipeline builds the affected recipes and saves them where
+   the team can fetch them (4.8), identified by their inputs.
+2. A member asks for a recipe. The tool finds the saved build for their target and architecture
+   and deploys it (4.9), running per-instance setup.
+3. If no saved build exists, the tool builds locally or refuses, as the team's setting says.
+
+What can go wrong:
+- The saved build contains something private (4.11).
+- The store is unreachable and the tool silently builds locally. The fallback must be stated.
+
+### 4.32 Install, update and keep the tool compatible
+
+**Actors:** all. **Goal:** the tool itself is one command to install and one to update on each
+platform, and recipes written for an earlier tool keep working or fail clearly.
+
+Main flow:
+1. The tool is installed with one command per platform, without administrator rights where the
+   platform allows.
+2. The tool is updated with one command. Every record states the tool version that built it.
+3. A recipe or collection states the tool version it was written for. A newer tool builds it, or
+   says precisely what must change. An older tool refuses and names the version it needs.
+
+Variations:
+- A team pins the tool version for everyone.
+- An automated caller checks the version before relying on a behaviour.
+
+What can go wrong:
+- Behaviour changes between tool versions without a word. Changes to what a recipe means must be
+  versioned.
+
+### 4.33 Diagnose the host and recover the tool's state
+
+**Actors:** all. **Goal:** when a target is missing or the tool is confused, the user gets a reason
+and a way out.
+
+Main flow:
+1. The user asks for a check.
+2. The tool reports each target as usable, or why not: WSL not enabled, an engine not running,
+   no cluster credentials, no rights. It reports each collection as reachable, and at which
+   commit.
+3. The tool checks its own state: locks left by interrupted runs, records with no environment,
+   environments with no record. It offers to repair each, and says what the repair does.
+
+What can go wrong:
+- A repair removes something real. Repairs must be previewed and never assumed.
+- The check itself needs what is missing. It must degrade and still report.
+
 ---
 
 ## 5. Requirements
@@ -528,7 +934,7 @@ the other does not.
 
 ### 5.9 Lifecycle, storage, versions and variants
 
-Added in draft 2 from the decisions in section 9.
+Added in draft 2 from the decisions in section 9; R74 to R76 added in draft 3 from 4.15.
 
 | ID | Requirement | From | Today |
 |---|---|---|---|
@@ -542,6 +948,9 @@ Added in draft 2 from the decisions in section 9.
 | R71 | The build record states the commit of every collection used. | 4.6, 4.7 | yes |
 | R72 | Several versions of a strap can share one name, and the one whose tags match the target is used. | 4.4 | partly |
 | R73 | Nothing in the tool assumes every environment is Linux, so other platforms can be added. | 4.4 | no |
+| R74 | Several environments, built from different recipes, can exist side by side on one target. | 4.15 | yes |
+| R75 | A user-kept list of environments (name, recipe, target) can be built or rebuilt in one command, and the result names each one's outcome. | 4.15, 4.2 | no |
+| R76 | Any environment the tool built can be removed by one command, and removal states what it takes with it. | 4.15, 4.2 | no |
 
 ### 5.10 Why each "partly"
 
@@ -568,6 +977,52 @@ Added in draft 2 from the decisions in section 9.
 | R68 | Straps may run any command, and a WSL environment sees the Windows drives. | No strap or test does this, and a container's connections to the host are not part of a saved build. |
 | R72 | Some straps hold two versions in one file and choose by their own checks (package manager, target). | No separate versions under one name, and no selection by the tool. |
 | R60, R61 | Both runners share straps, recipes and the build record, each with its own suite. | They are separate programs, and each supports targets and options the other lacks. |
+| R82 | The record holds a content hash of every strap that ran and the commit of every collection. | Nothing verifies a collection against a stated identity before the build, and the record does not say what was verified. |
+| R89 | The macOS and Linux runner takes an architecture flag and a recipe setting, both tested; both runners record the image's architecture. | No architecture in target tags or in a saved build's identity; the Windows runner cannot choose one. |
+| R98 | Both runners write the tool's version and commit into the record. | No recipe or collection can state the tool version it needs, and nothing checks. |
+| R102 | A base reference with a digest is passed through to the engine, untested; the record stores the digest that was pulled. | No local file or local registry as a base source; nothing tested. |
+
+### 5.11 Collections, trust, lifecycle, team and the tool itself
+
+Added in draft 4 from 4.16 to 4.33.
+
+| ID | Requirement | From | Today |
+|---|---|---|---|
+| R77 | A collection's changes can be verified by building the affected recipes on every target they claim and each changed strap alone, leaving nothing behind; a target that cannot be tried is reported as untested. | 4.16 | no |
+| R78 | The tool can create a new strap or recipe in the required shape, with its metadata and tags. | 4.17 | no |
+| R79 | A strap or recipe can be marked superseded with a replacement; builds that use it warn, then after a stated period fail, in a form a program can read. | 4.17 | no |
+| R80 | A strap's source, collection, commit and declarations can be shown before it runs. | 4.18, 4.12 | no |
+| R81 | Builds can be restricted to named trusted collections; a one-off exception is recorded in the build record, and an automated caller can be denied exceptions. | 4.18 | no |
+| R82 | The build record identifies the exact content of every strap and the identity of every collection used, and states how a collection was verified. | 4.18, 4.7 | partly |
+| R83 | An environment can be returned to an earlier build, from a saved build or from a record, keeping storage that outlives it, and the user is told beforehand if the result may differ. | 4.19 | no |
+| R84 | A failed build's environment can be kept, marked as failed wherever environments are listed. | 4.20 | no |
+| R85 | The tool can say, per input, whether a rebuild would change anything, and says unknown where it cannot know. | 4.21 | no |
+| R86 | An environment can be given a lifetime or tied to a caller, and is removed when that ends, by a later run if need be, keeping its record. | 4.22 | no |
+| R87 | Everything the tool holds on a machine can be listed with size and age, previewed, and removed by choice or by rule; storage that outlives an environment is never removed without asking. | 4.23 | no |
+| R88 | Resource limits and devices are stated without naming a target, fulfilled per target, and any shortfall is reported before the deploy. | 4.24 | no |
+| R89 | Processor architecture is part of target tags, build records and saved-build identity, and the user can choose it. | 4.25 | partly |
+| R90 | A named group of environments can be deployed, connected, reported and removed as one, with a partial failure leaving a state that one command removes. | 4.26 | no |
+| R91 | Before a build, the tool states which operations need elevation and why; it uses unprivileged paths where a target has them; an unattended run never meets an elevation prompt. | 4.27 | no |
+| R92 | On a shared machine every instance, saved build and collection has an owner; only the owner lists and removes it; nothing private to one user is readable by another. | 4.28 | no |
+| R93 | Build records can be emitted for collection in one place and queried by strap, version, collection commit and tool version, and an answer states its coverage. | 4.29 | no |
+| R94 | Every environment matching such a query can be rebuilt in one command, with each outcome named. | 4.29, 4.15 | no |
+| R95 | A record from another machine can be the input to a build here, fetching collections at the commits it names; the two records are then compared, with differences and incomparable inputs stated. | 4.30, 4.7 | no |
+| R96 | A build request can be satisfied from a shared store of saved builds without a local build; what happens when none exists is a stated setting, never a silent fallback. | 4.31 | no |
+| R97 | The tool installs and updates with one command per platform. | 4.32 | no |
+| R98 | The build record states the tool's version; a recipe or collection can state the tool version it needs, and a mismatch is reported with both versions. | 4.32 | partly |
+| R99 | A check reports each target as usable or why not, each collection as reachable and at which commit, and inconsistencies in the tool's own state, with each repair previewed. | 4.33 | no |
+
+### 5.12 Prerequisites for needs met by parts
+
+These come from [MODULAR_CONCEPTS.md](MODULAR_CONCEPTS.md). Each is the one thing a base, strap,
+recipe or deploy template cannot do for itself. R100 is in phase 1 (section 6, decision 8 in
+section 9).
+
+| ID | Requirement | From | Today |
+|---|---|---|---|
+| R100 | A strap can declare a check; the tool runs it after the strap and reports pass or fail per strap, in the record and in the result. | MODULAR 1 | no |
+| R101 | The tool honours proxy and certificate settings when it fetches a base or a collection, since this happens before any strap runs. | MODULAR 2, 3 | no |
+| R102 | A base can be named by digest, or given as a local file or a local registry, and the record states which was used. | MODULAR 3, 4 | partly |
 
 ---
 
@@ -578,13 +1033,24 @@ All six are in scope. The order is a proposal.
 | Target | Build | Save | Deploy | Proposed phase | Today |
 |---|---|---|---|---|---|
 | WSL distribution | yes | yes | yes | 1 | build only |
-| Local container (several engines) | yes | yes | yes | 1 | build and save |
+| Local container (docker, podman, Apple `container`) | yes | yes | yes | 1 | build and save |
 | Kubernetes | from a saved build | to a registry | yes | 2 | no |
 | Proxmox container | yes | yes | yes | 2 | no |
 | Proxmox virtual machine | yes | yes | yes | 3 | no |
 | Cloud instance | yes | yes | yes | 3 | no |
 
+"Local container" is one target with several engines: docker and podman on Windows, macOS and
+Linux, and Apple's `container` on macOS. Kubernetes is the remote-container target. The
+developer's workbench (4.15) needs the first three rows: WSL, local containers and Kubernetes.
+
+Processor architecture (amd64, arm64) is a dimension of every target, not a target of its own
+(4.25, R89). A saved build exists per target and per architecture.
+
 A target added later must not require changes to existing straps or recipes.
+
+Requirements are not phased in this document, with one exception: a strap's declared check, run
+and reported by the tool (R100), is in phase 1 beside the WSL and local container targets, so
+that every strap written from then on can prove it worked.
 
 ---
 
@@ -628,11 +1094,28 @@ A target added later must not require changes to existing straps or recipes.
    tagged with the platforms and products they work with, as guardrails and as the way to hold
    several versions of one strap. See R6, R20, R72, R73.
 
+Decided by the operator, 2026-11-16, on draft 4:
+
+6. **Composing environments into a system is in scope.** Deploying, connecting and removing a
+   named group of environments as one is the tool's job, built on single deploys and the
+   parseable interface. See 4.26, R90.
+7. **No capture of hand-made environments.** Proposing a recipe from an existing environment was
+   considered and dropped: the result could only approximate, and the founding idea is that
+   environments come from recipes, not the other way round. Users who have a hand-made
+   environment write a recipe for it.
+8. **Strap checks are phase 1.** A strap can declare a check and the tool runs and reports it
+   (R100). This is small and makes every later strap more trustworthy, so it is built with the
+   first targets (section 6).
+
 ### Still open
 
 1. **The name.** "docker2wsl" describes one path out of many.
 2. **Distribution.** How the tool itself is installed and updated on each platform.
-3. **Tag vocabulary.** The list of platform and product names that target tags use, and who may
-   add to it.
+3. **Names the tool enforces.** Two lists the tool will check things against, decided together
+   because both are governance of shared names. First, the tag vocabulary: the platform,
+   product and architecture names that target tags use (R6, R89), and who may add to it.
+   Second, how a collection is verified: what "this collection is what it claims" means in R81
+   and R82, whether a repository and commit, a signature, a hash, or some of each. The second
+   part was added in draft 4.
 4. **Start and stop on shared targets.** Whether stopping means the same thing on every target,
    given that some discard everything outside persistent storage when stopped.
