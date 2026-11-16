@@ -1,0 +1,154 @@
+name: c2w-requirements
+version: 1
+plan: C:/code/docker2wsl/docs/NEW_TOOL_PROMPT.md
+defaults: {}
+lots:
+- id: context
+  objective: 'You are in C:\code\docker2wsl, the repo of container2wsl: a Windows
+    batch script (plus a bash
+
+    runner, container2x.sh) that builds a WSL distribution or a running container
+    from any OCI image,
+
+    then runs "straps" (bootstraps as root, poststraps as the user) chosen by a "recipe",
+    and writes a
+
+    build manifest. I am going to replace it with a new product in a compiled, cross-platform
+    language.
+
+    The language is NOT chosen yet and this task does not choose it; this task produces
+    the
+
+    requirements that a design, and the language choice, will be made against.
+
+
+    docs/USE_CASES.md already holds the agreed use cases, a numbered requirements
+    list (R1...), the
+
+    target phasing (section 6), the qualities (7), and the operator''s decisions and
+    open questions (9).
+
+    Treat it as the source of truth for scope. If that file is missing or has no numbered
+    requirements, stop and report; do not reconstruct it. Your job is to deepen it
+    with what the current
+
+    implementation knows, not to rewrite it.'
+  boundaries: ''
+  files: []
+  allow: []
+  context: []
+  workspace:
+    kind: dir
+    path: .
+  check:
+    kind: command
+    args:
+      run: 'false'
+  depends_on: []
+- id: step-1-inventory-the-current-tool-read-do-not-modify
+  objective: "Read, in this order: README.md, CLAUDE.md, TESTING.md, docs/RUNNERS.md,\
+    \ docs/USE_CASES.md,\ncontainer2wsl.bat (argument parsing and the :label subroutines),\
+    \ container2x.sh, lib/*, every file\nunder bootstraps/, poststraps/, recipes/,\
+    \ and the test files under tests/ (the asserts tell you\nwhat behaviour is relied\
+    \ on). Run `container2wsl.bat --help` and `bash container2x.sh --help` if\nthey\
+    \ exist; do not run a real build.\n\nWrite docs/CURRENT_TOOL_INVENTORY.md in the\
+    \ new repo (location below) with:\n- every command-line option and environment\
+    \ variable, with its meaning and default;\n- the build flow per target as it runs\
+    \ today, step by step;\n- the strap and recipe file formats, the rendering rules,\
+    \ and the variables a strap can use;\n- the manifest format and the c2w-manifest\
+    \ report;\n- a table of the \"hard-won quirks\" from CLAUDE.md, each classified\
+    \ as: a behaviour the new tool\n  must keep (and why), a platform fact the new\
+    \ tool must still handle, or an artifact of batch /\n  bash that disappears with\
+    \ the new implementation;\n- a list of what the tests assert, grouped by feature,\
+    \ as the seed of the parity test list."
+  boundaries: ''
+  files: []
+  allow: []
+  context: []
+  workspace:
+    kind: dir
+    path: .
+  check:
+    kind: command
+    args:
+      run: 'false'
+  depends_on:
+  - context
+- id: step-2-write-the-requirements
+  objective: "Create the new repo as a sibling folder: C:\\code\\c2w-next (placeholder;\
+    \ the product name is open\nquestion 1 in USE_CASES.md section 9, do not pick\
+    \ one). Run `git init` there and commit the three\ndocuments at the end. Put the\
+    \ requirements in docs/REQUIREMENTS.md. Copy docs/USE_CASES.md and\ndocs/MODULAR_CONCEPTS.md\
+    \ into the new repo unchanged, under docs/, so the requirements can cite\nthem\
+    \ by section; R100 to R102 in USE_CASES.md refer to the second document.\n\nRules\
+    \ for REQUIREMENTS.md:\n1. Keep the R-numbers from USE_CASES.md. Every existing\
+    \ R appears either as is, refined (same\n   number, sharper text, with \"refined\
+    \ from\" noted), or split (R12 -> R12a, R12b). New\n   requirements continue the\
+    \ numbering after the last existing one.\n2. Each requirement is one testable\
+    \ sentence: a reader can say how they would check it. \"Should be\n   fast\" is\
+    \ not one; \"a dry run of any recipe finishes in under 2 seconds on the reference\
+    \ machine\"\n   is.\n3. Each requirement carries: the use case(s) it serves (4.x),\
+    \ its phase (the phase of the earliest target in section 6 it applies to, or \"\
+    all\" for target-neutral requirements), and a\n   parity tag: KEEP (current behaviour\
+    \ the new tool reproduces), CHANGE (current behaviour,\n   deliberately different;\
+    \ say what and why), NEW (no counterpart today), DROP (current behaviour\n   the\
+    \ new tool will not have; say why).\n4. Group by area, following USE_CASES.md\
+    \ section 5, and add these areas: command-line interface\n   and output (including\
+    \ machine-readable output for use case 4.10); configuration and discovery\n  \
+    \ of recipes and strap collections; error handling and recovery (qualities \"\
+    Recoverable\" and\n   \"Transparent\"); installation and update of the tool itself\
+    \ (already use case 4.32 and R97,\n   R98; open question 2 covers only how it\
+    \ is distributed, so refine, do not duplicate); test strategy\n   (what a parity\
+    \ test suite against the current tool must cover, from the inventory).\n5. Non-functional\
+    \ requirements get their own section: platforms the tool runs ON (Windows, macOS,\n\
+    \   Linux) versus targets it builds FOR, single-binary or not, no runtime dependency\
+    \ on a scripting\n   language on the host, startup time, size of the install,\
+    \ telemetry (none unless stated).\n6. A section \"Constraints the implementation\
+    \ language must satisfy\": derive each from a\n   requirement (for example: must\
+    \ spawn and stream from wsl.exe and docker with correct handling\n   of UTF-16\
+    \ output; must ship as one file per platform; must be maintainable by a small\
+    \ team).\n   List constraints and the requirement each comes from. Do not rank\
+    \ or pick languages.\n7. A section \"Open questions\" that carries forward the\
+    \ four open questions from USE_CASES.md\n   section 9 and adds any new ones the\
+    \ inventory raised. For each, say what decision it blocks.\n8. Where USE_CASES.md\
+    \ and the current code disagree, record the disagreement under the\n   requirement;\
+    \ do not resolve it silently.\n\nDo not write any design: no module layout, no\
+    \ data model, no language comparison. If you find\nyourself describing how, move\
+    \ it to a \"Notes for the design\" appendix in one line each."
+  boundaries: ''
+  files: []
+  allow: []
+  context: []
+  workspace:
+    kind: dir
+    path: .
+  check:
+    kind: command
+    args:
+      run: 'false'
+  depends_on:
+  - step-1-inventory-the-current-tool-read-do-not-modify
+- id: done
+  objective: 'Done means: all three documents exist in C:\code\c2w-next\docs, every
+    R from USE_CASES.md is accounted
+
+    for, every requirement has a use case, phase, and parity tag, and there is one
+    commit. Finish with
+
+    a short summary: the counts of KEEP / CHANGE / NEW / DROP, the new open questions,
+    and anything in
+
+    the current tool you could not classify.'
+  boundaries: ''
+  files: []
+  allow: []
+  context: []
+  workspace:
+    kind: dir
+    path: .
+  check:
+    kind: command
+    args:
+      run: 'false'
+  depends_on:
+  - step-2-write-the-requirements

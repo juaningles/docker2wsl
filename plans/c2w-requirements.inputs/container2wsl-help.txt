@@ -1,0 +1,28 @@
+
+Usage: container2wsl <image> [options]
+
+ image                Docker image (e.g. ubuntu:22.04, myrepo/img:tag)
+
+Options:
+ --name,     -n NAME  WSL distribution name (default: derived from image)
+ --user,     -u USER  Default Linux user    (default: wsluser)
+ --location, -l PATH  WSL storage root      (default: C:\wsl-storage)
+ --bootstrap, -b FILE Run commands from FILE as root after setup (repeatable)
+ --poststrap, -p FILE Run commands from FILE as user after setup (repeatable)
+ --private DIR        Private overlay folder for straps/ssh-keys (repeatable; default:
+                      C2W_PRIVATE_DIRS, else siblings with a .devtools-overlay marker)
+ --force,    -f       Overwrite existing WSL distro (or container) with same name
+ --target T          wsl (default, or C2W_TARGET) or container: a running docker/podman
+                      container named NAME instead of a WSL distro
+ --commit IMAGE:TAG   container target: also save the result as an image
+ --dry-run            Show resolved config without executing
+ --recipe NAME        Defaults from <private overlay>\recipes\NAME.conf (or a .conf path);
+                      the other arguments override them. --recipes lists them.
+ --help,     -h       Show this help
+
+Examples:
+ container2wsl ubuntu:22.04
+ container2wsl ubuntu:22.04 --name mydev --user john
+ container2wsl ubuntu:22.04 --location D:\wsl
+ container2wsl ubuntu:24.04 --target container --name dev -u john --commit localhost/dev:1
+

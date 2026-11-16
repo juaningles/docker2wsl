@@ -1,0 +1,286 @@
+# Follow-on to c2w-requirements.skein.yaml. That run finished init-repo, planner, inventory,
+# requirements, evaluate-1 and repair-1. evaluate-2 completed its evaluation (committed on
+# c2wreq/evaluate-2, verdict fail on A24 only) and asked the operator a question; delivering the
+# answer hit two Moirai bugs (resume of a non-persisted session; relative run path on resume),
+# which left evaluate-2 failed and the rest skipped. This skein continues from c2wreq/evaluate-2
+# with the operator's ruling written into the briefs. Same roles, hosts, models and lot caps.
+name: c2w-requirements-2
+version: 1
+plan: ../docs/NEW_TOOL_PROMPT.md
+max_run_cost_usd: 80.00
+land: { lot: finalize, into: main }
+defaults:
+  host: ucode01
+  harness: claude-code
+  model: sonnet
+  profile: edit
+  allow:
+    - "Read(//mnt/c/code/docker2wsl/**)"
+  risk: reversible
+  timeout_s: 2400
+  max_cost_usd: 6.00
+  max_turns: 150
+  retry_delay_s: 60
+  base: main
+
+lots:
+  # ---------------------------------------------------------------- evaluator, round 2, after the operator's ruling
+  - id: evaluate-2b
+    host: claude01
+    model: claude-fable-5-2
+    max_cost_usd: 8.00
+    allow:
+      - "Bash(ls*)"
+      - "Bash(cat*)"
+      - "Bash(grep*)"
+      - "Bash(head*)"
+      - "Bash(tail*)"
+      - "Bash(wc*)"
+      - "Bash(sort*)"
+      - "Bash(cmp*)"
+      - "Bash(diff*)"
+      - "Bash(jq*)"
+      - "Bash(bash /mnt/c/code/docker2wsl/container2x.sh --help*)"
+    objective: |
+      You are the EVALUATOR, finishing round 2. You are a fresh session; you report and never fix.
+
+      A previous evaluator session completed round 2 and committed its files on this branch:
+      harness/evidence/round-2/evaluation.json and defects.md. Its verdict was "fail" on one
+      required check only, A24 ("one commit"), recorded as defect D-201. It asked the operator
+      how to treat it, and the operator ruled:
+
+        "Squash at merge. Do not change the spec or acceptance.json. A later lot (finalize) puts
+        both documents on main as exactly one commit, and its check enforces that count. On this
+        working branch, per-step commits are expected: judge A24 as pass if the tree is clean
+        and both documents are committed, cite this operator ruling as the evidence, withdraw
+        D-201, and apply the same reading in later rounds."
+
+      Apply the ruling to the round-2 files in place:
+      - Confirm for yourself that `git status --porcelain` is empty and that both
+        docs/CURRENT_TOOL_INVENTORY.md and docs/REQUIREMENTS.md are committed. If so, set A24 to
+        "pass" in evaluation.json with evidence that quotes what you observed and cites the
+        operator ruling of 2026-11-16; mark D-201 withdrawn in defects.md with the same reason
+        and remove it from the "defects" list.
+      - Do not redo the rest of the evaluation and do not change any other result, score or
+        defect, unless you find one that is plainly inconsistent with its own evidence; say so
+        in defects.md if you do.
+      - Recompute the verdict by the rule: "pass" only if every required check passes and every
+        score is at or above the threshold in harness/acceptance.json.
+
+      Commit on the current branch with message "harness: evaluation round 2, operator ruling on A24".
+    boundaries: |
+      Write only under harness/evidence/round-2/. Do not edit anything under docs/, the round-1
+      evidence, nor harness/spec.md, acceptance.json, calibration.md or PROGRESS.md. Do not fix
+      defects. Nothing under /mnt/c/code/docker2wsl may change. Do not push.
+    files: [harness/evidence/round-2/evaluation.json, harness/evidence/round-2/defects.md]
+    context:
+      - harness/acceptance.json, harness/spec.md, harness/calibration.md
+      - /mnt/c/code/docker2wsl/docs/NEW_TOOL_PROMPT.md (the brief the documents answer)
+      - /mnt/c/code/docker2wsl (README.md, CLAUDE.md, TESTING.md, container2wsl.bat, container2x.sh, lib/, tests/)
+      - /mnt/c/code/docker2wsl/plans/c2w-requirements.inputs/container2wsl-help.txt (output of `container2wsl.bat --help`, captured on Windows)
+    workspace: { kind: worktree, repo: /mnt/c/code/c2w-next, branch: c2wreq/evaluate-2b, base: c2wreq/evaluate-2 }
+    check:
+      kind: command
+      args:
+        run: >-
+          python3 -c 'import json,sys;
+          a=json.load(open("harness/acceptance.json")); e=json.load(open(sys.argv[1]));
+          assert e["verdict"] in ("pass","fail");
+          req={c["id"] for c in a["checks"] if c.get("required")};
+          res={c["id"]:c["result"] for c in e["checks"]};
+          assert {c["id"] for c in a["checks"]}<=set(res), "checks without a result";
+          assert all(v in ("pass","fail") for v in res.values());
+          assert all(str(c.get("evidence","")).strip() for c in e["checks"]), "result without evidence";
+          sc=e["scores"]; assert set(a["scoring"]["dimensions"])<=set(sc);
+          ok=all(res[i]=="pass" for i in req) and all(sc[d]>=a["scoring"]["threshold"] for d in a["scoring"]["dimensions"]);
+          assert (e["verdict"]=="pass")==ok, "verdict disagrees with checks and scores"'
+          harness/evidence/round-2/evaluation.json
+          && { jq -e '.verdict=="pass"' harness/evidence/round-2/evaluation.json >/dev/null || grep -q '^defect:' harness/evidence/round-2/defects.md; }
+          && git diff --quiet c2wreq/evaluate-2 HEAD -- docs harness/spec.md harness/acceptance.json harness/calibration.md harness/PROGRESS.md harness/evidence/round-1
+          && test -z "$(git status --porcelain)"
+        timeout_s: 60
+
+
+  # ---------------------------------------------------------------- repair 2 (last repair: R = 2)
+  - id: repair-2
+    host: ucode01
+    model: sonnet
+    depends_on: [evaluate-2b]
+    allow:
+      - "Bash(ls*)"
+      - "Bash(cat*)"
+      - "Bash(grep*)"
+      - "Bash(head*)"
+      - "Bash(tail*)"
+      - "Bash(wc*)"
+      - "Bash(sort*)"
+      - "Bash(jq*)"
+    objective: |
+      You are the BUILDER, repair round 2, the last repair this run allows. The evaluator's
+      retest is harness/evidence/round-2/evaluation.json and defects.md (round 1 is beside it for
+      history).
+
+      Operator ruling, 2026-11-16: check A24 ("one commit") is judged on the final single commit
+      that a later lot makes, so per-step commits on this branch are expected. Do not squash,
+      amend or rewrite history.
+
+      - If the round-2 verdict is "pass" and defects.md lists no open defect: change nothing
+        under docs/. Add a line to harness/PROGRESS.md, "Round 2: pass, no repair", and commit.
+      - If the verdict is "pass" but defects are still open: reproduce each from its steps and
+        fix those whose fix is clear from the sources (docs/USE_CASES.md, /mnt/c/code/docker2wsl,
+        read only), keeping every rule of Step 2 of the brief true. Record each under
+        "Round 2 repairs" as described below.
+      - If it is "fail": reproduce each open defect from its steps and fix it in
+        docs/CURRENT_TOOL_INVENTORY.md or docs/REQUIREMENTS.md, going back to the sources
+        (docs/USE_CASES.md, /mnt/c/code/docker2wsl, read only). Fix every "blocks-ready" defect
+        and every failed required check. A defect that came back after a round-1 fix means the
+        first fix treated the wording, not the cause: find the cause. If a defect cannot be fixed
+        without a decision that is the operator's (a name, a language, an open question), say so
+        in PROGRESS.md and record it under "Open questions" in REQUIREMENTS.md rather than
+        deciding it. Keep every rule of Step 2 of the brief true while repairing.
+      - Update harness/PROGRESS.md: under "Round 2 repairs", one line per defect id with
+        "fixed", "not fixed" or "disputed" and where; refresh the "Summary" counts of
+        KEEP / CHANGE / NEW / DROP, the new open questions and anything unclassified; state the
+        remaining failures.
+
+      Commit on the current branch with message "docs: repair round 2".
+    boundaries: |
+      Write only docs/CURRENT_TOOL_INVENTORY.md, docs/REQUIREMENTS.md and harness/PROGRESS.md.
+      Never edit harness/evidence/ (the evaluator's record), harness/spec.md, acceptance.json or
+      calibration.md, or the two copied documents. Nothing under /mnt/c/code/docker2wsl may change.
+      Do not push.
+    files: [docs/CURRENT_TOOL_INVENTORY.md, docs/REQUIREMENTS.md, harness/PROGRESS.md]
+    context:
+      - harness/evidence/round-2/evaluation.json, harness/evidence/round-2/defects.md
+      - harness/evidence/round-1/defects.md (history)
+      - /mnt/c/code/docker2wsl/docs/NEW_TOOL_PROMPT.md "Step 1", "Step 2"
+      - harness/spec.md, harness/acceptance.json
+    workspace: { kind: worktree, repo: /mnt/c/code/c2w-next, branch: c2wreq/repair-2 }
+    check:
+      kind: command
+      args:
+        run: >-
+          q=docs/REQUIREMENTS.md; test -s $q && test -s docs/CURRENT_TOOL_INVENTORY.md
+          && for r in $(grep -oE '^\| R[0-9]+ ' docs/USE_CASES.md | grep -oE 'R[0-9]+' | sort -u);
+          do grep -qE "(^|[^A-Za-z0-9])$r[a-z]?([^A-Za-z0-9]|$)" $q || { echo "R id not accounted for: $r"; exit 1; }; done
+          && for h in "Non-functional requirements" "Constraints the implementation language must satisfy" "Open questions";
+          do grep -q "^## $h" $q || { echo "missing section: $h"; exit 1; }; done
+          && grep -q "Round 2" harness/PROGRESS.md
+          && { jq -e '.verdict=="pass"' harness/evidence/round-2/evaluation.json >/dev/null || ! git diff --quiet c2wreq/evaluate-2b HEAD -- docs; }
+          && git diff --quiet c2wreq/evaluate-2b HEAD -- harness/evidence harness/spec.md harness/acceptance.json harness/calibration.md docs/USE_CASES.md docs/MODULAR_CONCEPTS.md
+          && test -z "$(git status --porcelain)"
+        timeout_s: 120
+
+  # ---------------------------------------------------------------- evaluator, round 3 (final verdict)
+  - id: evaluate-3
+    host: claude01
+    model: claude-fable-5-2
+    depends_on: [repair-2]
+    max_cost_usd: 8.00
+    allow:
+      - "Bash(ls*)"
+      - "Bash(cat*)"
+      - "Bash(grep*)"
+      - "Bash(head*)"
+      - "Bash(tail*)"
+      - "Bash(wc*)"
+      - "Bash(sort*)"
+      - "Bash(cmp*)"
+      - "Bash(diff*)"
+      - "Bash(jq*)"
+      - "Bash(bash /mnt/c/code/docker2wsl/container2x.sh --help*)"
+    objective: |
+      You are the EVALUATOR, round 3: the final verdict of this run. You are a fresh session; you
+      report and never fix. No repair follows this round, so the verdict must be the one you
+      would defend to the operator: do not pass work to be kind, and do not fail it on taste.
+      harness/PROGRESS.md holds the builder's claims; claims are not evidence.
+
+      Operator ruling, 2026-11-16, on check A24 ("one commit"): a later lot (finalize) puts both
+      documents on main as exactly one commit and its check enforces that count. On this working
+      branch per-step commits are expected: judge A24 as pass if the tree is clean and both
+      documents are committed, and cite this ruling as the evidence.
+
+      - If harness/evidence/round-2/evaluation.json has verdict "pass" and
+        `git diff --quiet c2wreq/evaluate-2 HEAD -- docs` shows the documents unchanged since, do
+        not re-evaluate: write round-3 files that carry the round-2 results forward, with
+        "carried_forward": true in evaluation.json and "no defects" in defects.md.
+      - Otherwise: retest every defect open in round 2 by its steps, re-run every check in
+        harness/acceptance.json by its steps, rule on disputed defects, and score the four
+        dimensions again using harness/calibration.md. Also confirm the brief's "Done" clause as
+        far as this branch can show it: the inventory, the requirements and the two copied
+        documents exist under docs/, every R of USE_CASES.md is accounted for, every requirement
+        has a use case, a phase and a parity tag, and the "Summary" in harness/PROGRESS.md
+        (counts of KEEP / CHANGE / NEW / DROP) matches what REQUIREMENTS.md actually contains;
+        count them yourself.
+
+      Evidence channels, file formats and the verdict rule are the same as earlier rounds: write
+      harness/evidence/round-3/evaluation.json ({"round": 3, "verdict", "checks" with id, result
+      and evidence for every check in acceptance.json, "scores", "defects"}) and
+      harness/evidence/round-3/defects.md (ids D-301, ...; still-open defects keep a "was:"
+      line; "no defects" if none). The verdict is "pass" only if every required check passes and
+      every score is at or above the threshold. If it is "fail", end defects.md with a section
+      "## For the operator": what remains, and whether one more repair round would likely close it.
+
+      Commit on the current branch with message "harness: evaluation round 3".
+    boundaries: |
+      Write only under harness/evidence/round-3/. Do not edit anything under docs/, earlier
+      evidence, nor harness/spec.md, acceptance.json, calibration.md or PROGRESS.md. Do not fix
+      defects. Nothing under /mnt/c/code/docker2wsl may change. Do not push.
+    files: [harness/evidence/round-3/evaluation.json, harness/evidence/round-3/defects.md]
+    context:
+      - harness/acceptance.json, harness/spec.md, harness/calibration.md
+      - /mnt/c/code/docker2wsl/docs/NEW_TOOL_PROMPT.md (the brief the documents answer)
+      - /mnt/c/code/docker2wsl (README.md, CLAUDE.md, TESTING.md, container2wsl.bat, container2x.sh, lib/, tests/)
+      - /mnt/c/code/docker2wsl/plans/c2w-requirements.inputs/container2wsl-help.txt (output of `container2wsl.bat --help`, captured on Windows)
+    workspace: { kind: worktree, repo: /mnt/c/code/c2w-next, branch: c2wreq/evaluate-3 }
+    check:
+      kind: command
+      args:
+        run: >-
+          python3 -c 'import json,sys;
+          a=json.load(open("harness/acceptance.json")); e=json.load(open(sys.argv[1]));
+          assert e["verdict"] in ("pass","fail");
+          req={c["id"] for c in a["checks"] if c.get("required")};
+          res={c["id"]:c["result"] for c in e["checks"]};
+          assert {c["id"] for c in a["checks"]}<=set(res), "checks without a result";
+          assert all(v in ("pass","fail") for v in res.values());
+          assert all(str(c.get("evidence","")).strip() for c in e["checks"]), "result without evidence";
+          sc=e["scores"]; assert set(a["scoring"]["dimensions"])<=set(sc);
+          ok=all(res[i]=="pass" for i in req) and all(sc[d]>=a["scoring"]["threshold"] for d in a["scoring"]["dimensions"]);
+          assert (e["verdict"]=="pass")==ok, "verdict disagrees with checks and scores"'
+          harness/evidence/round-3/evaluation.json
+          && { jq -e '.verdict=="pass"' harness/evidence/round-3/evaluation.json >/dev/null || grep -q '^defect:' harness/evidence/round-3/defects.md; }
+          && git diff --quiet c2wreq/repair-2 HEAD -- docs harness/spec.md harness/acceptance.json harness/calibration.md harness/PROGRESS.md harness/evidence/round-1 harness/evidence/round-2
+          && test -z "$(git status --porcelain)"
+        timeout_s: 60
+
+  # ---------------------------------------------------------------- finalize: ready(x) gate, one commit
+  - id: finalize
+    host: claude01
+    harness: shell
+    max_cost_usd: 0
+    depends_on: [evaluate-3]
+    timeout_s: 120
+    objective: |
+      Gate and package. Refuses unless the round-3 verdict is "pass" (equation 1: every required
+      check passed, every score met the threshold). Then puts the two finished documents on a
+      branch cut from main as ONE commit, which `moirai land` fast-forwards main to. The harness
+      files (spec, acceptance checks, evidence, progress) stay on branch c2wreq/evaluate-3.
+    boundaries: Commits docs/CURRENT_TOOL_INVENTORY.md and docs/REQUIREMENTS.md only. Does not touch main.
+    command: |
+      set -e
+      git show c2wreq/evaluate-3:harness/evidence/round-3/evaluation.json | jq -e '.verdict=="pass"' >/dev/null
+      git checkout c2wreq/evaluate-3 -- docs/CURRENT_TOOL_INVENTORY.md docs/REQUIREMENTS.md
+      git commit -q -m "docs: current tool inventory and requirements for the new tool"
+    files: [docs/CURRENT_TOOL_INVENTORY.md, docs/REQUIREMENTS.md]
+    workspace: { kind: worktree, repo: /mnt/c/code/c2w-next, branch: c2wreq/final, base: run }
+    check:
+      kind: command
+      args:
+        run: >-
+          git show c2wreq/evaluate-3:harness/evidence/round-3/evaluation.json | jq -e '.verdict=="pass"' >/dev/null
+          && git diff --quiet c2wreq/evaluate-3 HEAD -- docs
+          && test "$(git rev-list --count main..HEAD)" = 1
+          && test "$(ls docs | wc -l)" = 4
+          && test -z "$(git status --porcelain)"
+        timeout_s: 60
