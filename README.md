@@ -11,7 +11,7 @@ For a WSL distro (`container2wsl.bat`):
 - Windows 10/11 with [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) enabled
 - A container engine to fetch the image: Docker (Desktop or CLI), or podman with a `docker` shim such as
   devtools' `docker.bat` (its machine must be running)
-- Run from an **elevated** (Administrator) Command Prompt or PowerShell
+- A normal Command Prompt or PowerShell: no step of a build needs an elevated (Administrator) session
 
 For a container instead (`--target container` on Windows, `container2x.sh` on macOS / Linux): just the
 engine, docker, podman or Apple's `container`, plus bash 3.2 or later on macOS / Linux.
