@@ -3,6 +3,12 @@
 Handoff prompt for the session that starts the new repository. Reforged 2026-11-16 (v3) and
 updated for USE_CASES.md draft 4. Give it to an agent sitting in this repo.
 
+Revised 2026-11-16 (v4) after the first run, which produced C:\code\c2w-next at commit f8aa309.
+Four changes, each from a problem that run met: the files to commit are named (v3 said "three
+documents" for four files); "one commit" now means one commit on main, so a staged run may commit
+as it goes; the Windows help text may come from a captured file; and the closing summary has a
+stated destination. Rule 6 also says its examples are illustrations.
+
 ## Context
 
 You are in C:\code\docker2wsl, the repo of container2wsl: a Windows batch script (plus a bash
@@ -23,7 +29,9 @@ Read, in this order: README.md, CLAUDE.md, TESTING.md, docs/RUNNERS.md, docs/USE
 container2wsl.bat (argument parsing and the :label subroutines), container2x.sh, lib/*, every file
 under bootstraps/, poststraps/, recipes/, and the test files under tests/ (the asserts tell you
 what behaviour is relied on). Run `container2wsl.bat --help` and `bash container2x.sh --help` if
-they exist; do not run a real build.
+they exist; do not run a real build. If you are somewhere a .bat cannot run (inside WSL, for
+example), use a captured copy of the help text if you were given one, check it against the help
+block in the script, and say in the inventory that you did so.
 
 Write docs/CURRENT_TOOL_INVENTORY.md in the new repo (location below) with:
 - every command-line option and environment variable, with its meaning and default;
@@ -38,10 +46,16 @@ Write docs/CURRENT_TOOL_INVENTORY.md in the new repo (location below) with:
 ## Step 2: write the requirements
 
 Create the new repo as a sibling folder: C:\code\c2w-next (placeholder; the product name is open
-question 1 in USE_CASES.md section 9, do not pick one). Run `git init` there and commit the three
-documents at the end. Put the requirements in docs/REQUIREMENTS.md. Copy docs/USE_CASES.md and
-docs/MODULAR_CONCEPTS.md into the new repo unchanged, under docs/, so the requirements can cite
-them by section; R100 to R102 in USE_CASES.md refer to the second document.
+question 1 in USE_CASES.md section 9, do not pick one). Run `git init` there. Put the requirements
+in docs/REQUIREMENTS.md. Copy docs/USE_CASES.md and docs/MODULAR_CONCEPTS.md into the new repo
+unchanged, under docs/, so the requirements can cite them by section; R100 to R102 in USE_CASES.md
+refer to the second document.
+
+The new repo's docs/ folder ends with exactly four files: the two copies, CURRENT_TOOL_INVENTORY.md
+and REQUIREMENTS.md. On `main`, the two copies may be their own first commit; the inventory and the
+requirements arrive together in one commit. If the work is done in stages or by several sessions,
+commit on working branches as you go and squash when merging to `main`; a check of "one commit"
+applies to `main` only.
 
 Rules for REQUIREMENTS.md:
 1. Keep the R-numbers from USE_CASES.md. Every existing R appears either as is, refined (same
@@ -66,7 +80,10 @@ Rules for REQUIREMENTS.md:
 6. A section "Constraints the implementation language must satisfy": derive each from a
    requirement (for example: must spawn and stream from wsl.exe and docker with correct handling
    of UTF-16 output; must ship as one file per platform; must be maintainable by a small team).
-   List constraints and the requirement each comes from. Do not rank or pick languages.
+   List constraints and the requirement each comes from. Do not rank or pick languages. The
+   examples above are illustrations, not requirements: keep a constraint only if a requirement
+   states what it needs, and if none does, raise an open question and do not cite a source that
+   does not say it.
 7. A section "Open questions" that carries forward the four open questions from USE_CASES.md
    section 9 and adds any new ones the inventory raised. For each, say what decision it blocks.
 8. Where USE_CASES.md and the current code disagree, record the disagreement under the
@@ -77,7 +94,9 @@ yourself describing how, move it to a "Notes for the design" appendix in one lin
 
 ## Done
 
-Done means: all three documents exist in C:\code\c2w-next\docs, every R from USE_CASES.md is accounted
-for, every requirement has a use case, phase, and parity tag, and there is one commit. Finish with
-a short summary: the counts of KEEP / CHANGE / NEW / DROP, the new open questions, and anything in
-the current tool you could not classify.
+Done means: the four files exist in C:\code\c2w-next\docs, every R from USE_CASES.md is accounted
+for, every requirement has a use case, phase, and parity tag, and `main` holds the inventory and
+the requirements in one commit. Finish with a short summary: the counts of KEEP / CHANGE / NEW /
+DROP, the new open questions, anything in the current tool you could not classify, and anything
+you could not determine without a real build or test run. Give the summary as your final message
+and put the same text in the body of that commit's message; do not add a file for it.
